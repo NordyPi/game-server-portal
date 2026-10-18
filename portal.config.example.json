@@ -1,0 +1,16 @@
+{
+  "publicHost": "play.yourdomain.com",
+  "users": {
+    "you@example.com": "Loklin",
+    "friend@example.com": "Alex"
+  },
+  "instances": [
+    {
+      "id": "assetto",
+      "game": "assetto-corsa",
+      "name": "Assetto Corsa",
+      "dir": "/home/YOUR_USER/games/assetto-corsa/main",
+      "unit": "assetto-corsa@main.service"
+    }
+  ]
+}

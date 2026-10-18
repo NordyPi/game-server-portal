@@ -1,0 +1,26 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# env files
+.env*
+!.env.example
+
+# server-specific config and runtime data
+/portal.config.json
+/data/
+
+# local dev copy of the test fixtures (created by `npm run dev`)
+/dev-data/
+
+# misc
+.DS_Store
+*.log
+
+# local Claude preview config
+/.claude/

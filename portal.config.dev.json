@@ -1,0 +1,13 @@
+{
+  "publicHost": "localhost",
+  "users": {},
+  "instances": [
+    {
+      "id": "assetto",
+      "game": "assetto-corsa",
+      "name": "Assetto Corsa",
+      "dir": "dev-data/assetto-corsa",
+      "unit": "assetto-corsa@main.service"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+# The portal website. Installed as a *user* service by deploy/setup.sh:
+#   systemctl --user status game-portal
+#   journalctl --user -u game-portal -f
+[Unit]
+Description=Game server portal (website)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%h/game-server-portal
+EnvironmentFile=%h/game-server-portal/.env
+Environment=NODE_ENV=production
+# Only reachable from this machine: friends come in through the Cloudflare Tunnel.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3100
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,21 @@
+# One Assetto Corsa server (AssettoServer) per instance name, e.g. assetto-corsa@main runs
+# ~/games/assetto-corsa/main/AssettoServer. Set up by deploy/install-assettoserver.sh.
+#   systemctl --user status assetto-corsa@main
+#   journalctl --user -u assetto-corsa@main -f
+[Unit]
+Description=Assetto Corsa server (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%h/games/assetto-corsa/%i
+ExecStart=%h/games/assetto-corsa/%i/AssettoServer
+# Ctrl+C equivalent, so the server shuts down cleanly.
+KillSignal=SIGINT
+TimeoutStopSec=20
+# Come back by itself after a crash (but not after "Stop" in the portal).
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

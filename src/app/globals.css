@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   PORTAL COLORS — change these to re-theme everything.
+   Components use these tokens (bg-surface, text-muted, bg-accent…), never raw colors.
+   ========================================================================== */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eceef2;
+  --fg: #15171c;
+  --muted: #5f6573;
+  --border: #dcdfe6;
+  --accent: #d9480f;          /* buttons, links, highlights */
+  --accent-fg: #ffffff;
+  --ok: #2f9e44;              /* running */
+  --warn: #e8a10c;            /* starting / stopping */
+  --danger: #c92a2a;          /* failed, stop button */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --surface: #171a20;
+    --surface-2: #20242c;
+    --fg: #eef0f4;
+    --muted: #949bab;
+    --border: #2a2f39;
+    --accent: #ff6b2c;
+    --accent-fg: #15171c;
+    --ok: #51cf66;
+    --warn: #fcc419;
+    --danger: #ff6b6b;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-heading), var(--font-body), ui-sans-serif, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* Shared form controls */
+.field {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+}
+.field:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  transition: opacity 0.15s, background 0.15s;
+}
+.btn:hover:not(:disabled) {
+  background: var(--border);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  opacity: 0.9;
+}
+.btn-danger {
+  color: var(--danger);
+}

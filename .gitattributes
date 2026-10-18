@@ -1,0 +1,8 @@
+# Keep LF line endings everywhere (shell scripts break on the Linux server with CRLF).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+# Fixture config files are CRLF on purpose (like real AC files made on Windows).
+tests/fixtures/**/*.ini -text
