@@ -56,6 +56,8 @@ test("reads the current settings, grid and ports", async () => {
     password: "",
     track: "pk_akina",
     layout: "",
+    cspVersion: null,
+    cspExtra: "",
     // Miata slots use red and white, so that row is "automatic"; both AE86 slots are panda.
     entries: [
       { car: "ks_mazda_miata", skin: "", count: 2 },
@@ -86,6 +88,8 @@ const good: AcSettingsInput = {
   password: "",
   track: "ks_nordschleife",
   layout: "endurance",
+  cspVersion: null,
+  cspExtra: "",
   entries: [
     { car: "ks_mazda_miata", skin: "red", count: 2 },
     { car: "ks_mazda_miata", skin: "", count: 2 },

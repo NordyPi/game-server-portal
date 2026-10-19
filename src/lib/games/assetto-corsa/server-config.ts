@@ -5,6 +5,7 @@ import { CONTENT_ID, type Content } from "./content";
 import { buildEntryList, carsOf, parseEntryList, rowsFromSlots, slotsFor, slotsSatisfy, totalSlots, type EntryRow } from "./entries";
 import { ensureMissingContentAllowed } from "./extra-config";
 import { formatTime, parseTime, secondsFromSunAngle, sunAngleFromSeconds } from "./sun";
+import { formatTrackSetting, parseTrackSetting } from "./track-setting";
 
 // Reads and writes the two files that decide what the server runs:
 //   cfg/server_cfg.ini   [SERVER] NAME, PASSWORD, TRACK, CONFIG_TRACK, CARS, MAX_CLIENTS,
@@ -16,8 +17,13 @@ import { formatTime, parseTime, secondsFromSunAngle, sunAngleFromSeconds } from 
 export type AcSettings = {
   name: string;
   password: string;
+  /** Track folder name, without any CSP requirement (see track-setting.ts). */
   track: string;
   layout: string;
+  /** Minimum Custom Shaders Patch build players need, or null for none. */
+  cspVersion: number | null;
+  /** Content Manager's extra TRACK segments, kept as they were (e.g. "D/../"). */
+  cspExtra: string;
   /** The grid. CARS and MAX_CLIENTS are derived from it. */
   entries: EntryRow[];
   /** Percent, 0 = no damage. */
@@ -40,7 +46,7 @@ export const DEFAULT_LAPS = 5;
 
 const cfgPath = (dir: string, file: string) => path.join(dir, "cfg", file);
 
-export async function readServerCfg(dir: string): Promise<{ settings: AcSettings; ports: AcPorts } | null> {
+export async function readServerCfg(dir: string): Promise<{ settings: AcSettings; ports: AcPorts; cars: string[] } | null> {
   let ini: IniFile;
   try {
     ini = new IniFile(await readFile(cfgPath(dir, "server_cfg.ini"), "utf8"));
@@ -50,6 +56,7 @@ export async function readServerCfg(dir: string): Promise<{ settings: AcSettings
   const get = (k: string, section = "SERVER") => ini.get(section, k) ?? "";
   const int = (k: string, section = "SERVER") => (/^-?\d+(\.\d+)?$/.test(get(k, section)) ? Math.round(Number(get(k, section))) : null);
 
+  const trackSetting = parseTrackSetting(get("TRACK"));
   const cars = get("CARS").split(";").map((c) => c.trim()).filter(Boolean);
   let entries = rowsFromSlots(parseEntryList(await readText(cfgPath(dir, "entry_list.ini"))));
   if (entries.length === 0 && cars.length) {
@@ -62,8 +69,10 @@ export async function readServerCfg(dir: string): Promise<{ settings: AcSettings
     settings: {
       name: get("NAME"),
       password: get("PASSWORD"),
-      track: get("TRACK"),
+      track: trackSetting.track,
       layout: get("CONFIG_TRACK"),
+      cspVersion: trackSetting.cspVersion,
+      cspExtra: trackSetting.cspExtra,
       entries,
       damage: int("DAMAGE_MULTIPLIER") ?? 100,
       tyreWear: int("TYRE_WEAR_RATE") ?? 100,
@@ -71,6 +80,8 @@ export async function readServerCfg(dir: string): Promise<{ settings: AcSettings
       sunAngle: int("SUN_ANGLE") ?? 0,
     },
     ports: { http: int("HTTP_PORT"), tcp: int("TCP_PORT"), udp: int("UDP_PORT") },
+    /** CARS= as written (can list more cars than the entry list uses). */
+    cars,
   };
 }
 
@@ -123,6 +134,10 @@ export function validateSettings(
   if (input.raceLaps !== null && (!Number.isInteger(input.raceLaps) || input.raceLaps < 1 || input.raceLaps > 999)) {
     errors.raceLaps = "A whole number of laps, 1 or more.";
   }
+  if (input.cspVersion !== null && (!Number.isInteger(input.cspVersion) || input.cspVersion < 1 || input.cspVersion > 99999)) {
+    errors.cspVersion = "A CSP build number like 4116, or leave it empty.";
+  }
+  if (!/^(?:[A-Za-z0-9_]+\/\.\.\/)*$/.test(input.cspExtra)) errors.cspVersion = "The server's CSP setting looks unusual; reload the page.";
   const seconds = parseTime(input.startTime);
   if (seconds === null) errors.startTime = "Use 24-hour time, like 14:30.";
 
@@ -134,6 +149,8 @@ export function validateSettings(
       password,
       track: input.track,
       layout: input.layout,
+      cspVersion: input.cspVersion,
+      cspExtra: input.cspVersion === null ? "" : input.cspExtra,
       entries: input.entries,
       damage: input.damage,
       tyreWear: input.tyreWear,
@@ -161,7 +178,7 @@ export async function writeSettings(dir: string, settings: AcSettings, content: 
   const ini = new IniFile(await readFile(serverCfgFile, "utf8"));
   ini.set("SERVER", "NAME", settings.name);
   ini.set("SERVER", "PASSWORD", settings.password);
-  ini.set("SERVER", "TRACK", settings.track);
+  ini.set("SERVER", "TRACK", formatTrackSetting(settings));
   ini.set("SERVER", "CONFIG_TRACK", settings.layout);
   ini.set("SERVER", "CARS", carsOf(settings.entries).join(";"));
   ini.set("SERVER", "MAX_CLIENTS", String(totalSlots(settings.entries)));

@@ -49,6 +49,8 @@ export async function applyAssettoSettings(instanceId: string, _prev: ApplyState
       password: text("password"),
       track: text("track"),
       layout: text("layout"),
+      cspVersion: text("cspVersion").trim() === "" ? null : Number(text("cspVersion")),
+      cspExtra: text("cspExtra"),
       entries: entries.data,
       damage: Number(text("damage")),
       tyreWear: Number(text("tyreWear")),
@@ -82,6 +84,9 @@ export async function applyAssettoSettings(instanceId: string, _prev: ApplyState
     if (JSON.stringify(before.settings.entries) !== JSON.stringify(settings.entries)) {
       const carName = (id: string) => content.cars.find((c) => c.id === id)?.name ?? id;
       changes.push(`grid → ${settings.entries.map((r) => `${r.count}× ${carName(r.car)}${r.skin ? ` (${r.skin})` : ""}`).join(", ")}`);
+    }
+    if (before.settings.cspVersion !== settings.cspVersion) {
+      changes.push(settings.cspVersion === null ? "removed the CSP requirement" : `requires CSP ${settings.cspVersion}`);
     }
     if (before.settings.damage !== settings.damage) changes.push(`damage ${settings.damage}%`);
     if (before.settings.tyreWear !== settings.tyreWear) changes.push(`tyre wear ${settings.tyreWear}%`);

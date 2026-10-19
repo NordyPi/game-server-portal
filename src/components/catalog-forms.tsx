@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { addCatalogCar, addCatalogTrack, removeCatalogEntry, type CatalogResult } from "@/app/catalog-actions";
+import { addCatalogCar, addCatalogTrack, addInUseToCatalog, removeCatalogEntry, type CatalogResult } from "@/app/catalog-actions";
 
 function useCatalogForm(submit: (form: FormData) => Promise<CatalogResult>, onSuccess?: () => void) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -167,6 +167,24 @@ function Submit({ pending, label, result }: { pending: boolean; label: string; r
     <div className="flex flex-wrap items-center gap-4">
       <button type="submit" className="btn btn-primary" disabled={pending}>
         {pending ? "Saving…" : label}
+      </button>
+      {result && !pending && <p className={`text-sm ${result.ok ? "text-ok" : "text-danger"}`}>{result.message}</p>}
+    </div>
+  );
+}
+
+export function AddInUseButton({ instanceId }: { instanceId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<CatalogResult | null>(null);
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <button
+        type="button"
+        className="btn btn-primary"
+        disabled={pending}
+        onClick={() => startTransition(async () => setResult(await addInUseToCatalog(instanceId)))}
+      >
+        {pending ? "Adding…" : "Add them to the lists"}
       </button>
       {result && !pending && <p className={`text-sm ${result.ok ? "text-ok" : "text-danger"}`}>{result.message}</p>}
     </div>

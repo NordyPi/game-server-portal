@@ -7,6 +7,7 @@ import path from "node:path";
 //   content/tracks/<track>/data/           single-layout track (CONFIG_TRACK empty)
 //   content/tracks/<track>/<layout>/data/  one folder per layout (CONFIG_TRACK=<layout>)
 //   content/tracks/<track>/ui[/<layout>]/ui_track.json   display name and pit count
+//   content/tracks/csp/<track>/…           same, for tracks that require a CSP version (see track-setting.ts)
 //
 // The ui_*.json files are optional (server packs from Content Manager often leave them out); we
 // fall back to folder names.
@@ -24,11 +25,32 @@ export const CONTENT_ID = /^[A-Za-z0-9_.\- ]{1,100}$/;
 const onServer: Source = { onServer: true, manual: false };
 
 export async function scanContent(serverDir: string): Promise<Content> {
-  const [cars, tracks] = await Promise.all([
+  const tracksDir = path.join(serverDir, "content", "tracks");
+  const [cars, tracks, cspTracks] = await Promise.all([
     scanCars(path.join(serverDir, "content", "cars")),
-    scanTracks(path.join(serverDir, "content", "tracks")),
+    scanTracks(tracksDir),
+    scanTracks(path.join(tracksDir, "csp")),
   ]);
-  return { cars, tracks };
+  return { cars, tracks: mergeTracks(tracks.filter((t) => t.id !== "csp"), cspTracks) };
+}
+
+/** A track can be in both content/tracks and content/tracks/csp; list it once with all its layouts. */
+function mergeTracks(a: Track[], b: Track[]): Track[] {
+  const byId = new Map(a.map((t) => [t.id, t]));
+  for (const t of b) {
+    const found = byId.get(t.id);
+    if (!found) {
+      byId.set(t.id, t);
+      continue;
+    }
+    const layouts = new Map(found.layouts.map((l) => [l.id, l]));
+    for (const l of t.layouts) {
+      const fl = layouts.get(l.id);
+      layouts.set(l.id, fl ? { ...fl, pitboxes: fl.pitboxes ?? l.pitboxes } : l);
+    }
+    byId.set(t.id, { ...found, layouts: [...layouts.values()].sort(byName) });
+  }
+  return [...byId.values()].sort(byName);
 }
 
 async function scanCars(dir: string): Promise<Car[]> {
@@ -75,7 +97,12 @@ async function scanTracks(dir: string): Promise<Track[]> {
 
 /** Multi-layout tracks repeat the track name in every layout ("Nordschleife - Endurance"); use the common part. */
 export function trackName(id: string, layouts: TrackLayout[]) {
-  if (layouts.length === 1) return layouts[0].name === "Default" ? prettify(id) : layouts[0].name;
+  if (layouts.length === 1) {
+    const only = layouts[0];
+    // "Default" or a name made from the layout folder (no ui_track.json): use the track's folder name instead.
+    const fallback = only.name === "Default" || (only.id !== "" && only.name === prettify(only.id));
+    return fallback ? prettify(id) : only.name;
+  }
   const names = layouts.map((l) => l.name);
   let prefix = names[0];
   for (const n of names) while (prefix && !n.startsWith(prefix)) prefix = prefix.slice(0, -1);

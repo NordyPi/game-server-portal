@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { dataDir, type Instance } from "@/lib/config";
 import { byName, CONTENT_ID, prettify, scanContent, trackName, type Car, type Content, type Track } from "./content";
+import { parseEntryList, type Slot } from "./entries";
 
 // Cars and tracks added by hand on the "Cars & tracks" page.
 //
@@ -58,8 +59,69 @@ export async function saveCatalog(file: string, catalog: Catalog) {
 
 /** Everything the settings page can offer: what's on the server plus what was added by hand. */
 export async function getContent(instance: Instance): Promise<Content> {
-  const [scanned, catalog] = await Promise.all([scanContent(instance.dir), loadCatalog(catalogFile(instance.id))]);
-  return mergeContent(scanned, catalog);
+  const [scanned, catalog, entryList] = await Promise.all([
+    scanContent(instance.dir),
+    loadCatalog(catalogFile(instance.id)),
+    readFile(path.join(instance.dir, "cfg", "entry_list.ini"), "utf8").catch(() => ""),
+  ]);
+  return withEntryListSkins(mergeContent(scanned, catalog), parseEntryList(entryList));
+}
+
+/**
+ * Skins the current entry list already uses count as known skins too, so they stay pickable
+ * even when the server has no skins/ folders (Content Manager server packs leave them out).
+ */
+export function withEntryListSkins(content: Content, slots: Slot[]): Content {
+  const used = new Map<string, Set<string>>();
+  for (const s of slots) if (s.skin && CONTENT_ID.test(s.skin)) used.set(s.model, (used.get(s.model) ?? new Set()).add(s.skin));
+  return {
+    ...content,
+    cars: content.cars.map((c) => (used.has(c.id) ? { ...c, skins: [...new Set([...c.skins, ...used.get(c.id)!])].sort() } : c)),
+  };
+}
+
+export type InUseMissing = { cars: { id: string; skins: string[] }[]; track: { id: string; layout: string } | null };
+
+/**
+ * Cars and the track the server is set up with right now that aren't in the lists yet. The
+ * "Cars & tracks" page offers to add them in one click, so an existing setup works straight away.
+ */
+export function missingFromLists(
+  current: { track: string; layout: string; cars: string[] },
+  slots: Slot[],
+  content: Content,
+): InUseMissing {
+  const known = new Set(content.cars.map((c) => c.id));
+  const ids = [...new Set([...current.cars, ...slots.map((s) => s.model)])].filter((id) => CONTENT_ID.test(id) && !known.has(id));
+  const cars = ids.map((id) => ({
+    id,
+    skins: [...new Set(slots.filter((s) => s.model === id && s.skin && CONTENT_ID.test(s.skin)).map((s) => s.skin))].sort(),
+  }));
+
+  const track = content.tracks.find((t) => t.id === current.track);
+  const trackMissing =
+    current.track && CONTENT_ID.test(current.track) && (current.layout === "" || CONTENT_ID.test(current.layout)) &&
+    !track?.layouts.some((l) => l.id === current.layout);
+  return { cars, track: trackMissing ? { id: current.track, layout: current.layout } : null };
+}
+
+/** Adds what missingFromLists() found to a catalog (keeping anything already in it). */
+export function addMissingToCatalog(catalog: Catalog, missing: InUseMissing): Catalog {
+  const cars = [...catalog.cars];
+  for (const m of missing.cars) {
+    const i = cars.findIndex((c) => c.id === m.id);
+    if (i >= 0) cars[i] = { ...cars[i], skins: [...new Set([...cars[i].skins, ...m.skins])].sort() };
+    else cars.push({ id: m.id, name: "", skins: m.skins });
+  }
+  const tracks = [...catalog.tracks];
+  if (missing.track) {
+    const { id, layout } = missing.track;
+    const i = tracks.findIndex((t) => t.id === id);
+    const newLayout = { id: layout, name: "", pitboxes: null };
+    if (i < 0) tracks.push({ id, name: "", layouts: [newLayout] });
+    else if (!tracks[i].layouts.some((l) => l.id === layout)) tracks[i] = { ...tracks[i], layouts: [...tracks[i].layouts, newLayout] };
+  }
+  return { cars, tracks };
 }
 
 export function mergeContent(scanned: Content, catalog: Catalog): Content {

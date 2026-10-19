@@ -3,15 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { getInstance } from "@/lib/config";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import {
+  addMissingToCatalog,
   catalogFile,
+  getContent,
   loadCatalog,
+  missingFromLists,
   manualCarSchema,
   manualTrackSchema,
   saveCatalog,
   type Catalog,
   type ManualLayout,
 } from "@/lib/games/assetto-corsa/catalog";
+import { parseEntryList } from "@/lib/games/assetto-corsa/entries";
+import { readServerCfg } from "@/lib/games/assetto-corsa/server-config";
 import { withInstanceLock } from "@/lib/locks";
 import { requireUser } from "@/lib/session";
 
@@ -114,4 +121,27 @@ function fieldErrors(error: { issues: { path: PropertyKey[]; message: string }[]
     out[key] ??= key === "pitboxes" ? "Pit boxes must be a whole number from 1 to 128." : issue.message;
   }
   return out;
+}
+
+/** Adds the cars and track the server currently uses (but the lists don't know yet) in one go. */
+export async function addInUseToCatalog(instanceId: string): Promise<CatalogResult> {
+  const user = await requireUser();
+  const instance = getInstance(instanceId);
+  if (instance?.game !== "assetto-corsa") return fail("Unknown server.");
+
+  const cfg = await readServerCfg(instance.dir);
+  if (!cfg) return fail("cfg/server_cfg.ini is missing on the server.");
+  const slots = parseEntryList(await readFile(path.join(instance.dir, "cfg", "entry_list.ini"), "utf8").catch(() => ""));
+  const missing = missingFromLists({ ...cfg.settings, cars: cfg.cars }, slots, await getContent(instance));
+  const count = missing.cars.length + (missing.track ? 1 : 0);
+  if (count === 0) return { ok: true, message: "Everything the server uses is already in the lists.", errors: {} };
+
+  await updateCatalog(instance.id, (c) => {
+    const merged = addMissingToCatalog(c, missing);
+    c.cars = merged.cars;
+    c.tracks = merged.tracks;
+  });
+  const parts = [missing.cars.length ? `${missing.cars.length} car${missing.cars.length === 1 ? "" : "s"}` : "", missing.track ? `track ${missing.track.id}` : ""].filter(Boolean);
+  await logActivity({ instanceId: instance.id, user: user.name, message: `added the server's current ${parts.join(" and ")} to the lists` });
+  return { ok: true, message: `Added ${parts.join(" and ")}. To give one a nicer name, add it again above with the same folder name.`, errors: {} };
 }

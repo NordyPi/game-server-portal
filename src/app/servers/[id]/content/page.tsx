@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AddCarForm, AddTrackForm, RemoveEntryButton } from "@/components/catalog-forms";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { AddCarForm, AddInUseButton, AddTrackForm, RemoveEntryButton } from "@/components/catalog-forms";
 import { getInstance } from "@/lib/config";
-import { getContent } from "@/lib/games/assetto-corsa/catalog";
+import { getContent, missingFromLists } from "@/lib/games/assetto-corsa/catalog";
+import { parseEntryList } from "@/lib/games/assetto-corsa/entries";
+import { readServerCfg } from "@/lib/games/assetto-corsa/server-config";
 import type { Source } from "@/lib/games/assetto-corsa/content";
 import { requireUser } from "@/lib/session";
 
@@ -13,7 +17,13 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
   await requireUser();
   const instance = getInstance((await params).id);
   if (instance?.game !== "assetto-corsa") notFound();
-  const { cars, tracks } = await getContent(instance);
+  const [content, cfg, entryList] = await Promise.all([
+    getContent(instance),
+    readServerCfg(instance.dir),
+    readFile(path.join(instance.dir, "cfg", "entry_list.ini"), "utf8").catch(() => ""),
+  ]);
+  const { cars, tracks } = content;
+  const missing = cfg ? missingFromLists({ ...cfg.settings, cars: cfg.cars }, parseEntryList(entryList), content) : null;
 
   return (
     <div className="space-y-8">
@@ -27,6 +37,28 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
           <code className="font-mono">\tracks</code> (Content Manager&apos;s <em>Folder</em> button takes you there).
         </p>
       </div>
+
+      {missing && (missing.cars.length > 0 || missing.track) && (
+        <section className="rounded-xl border border-accent bg-surface p-5">
+          <h2 className="mb-2 font-display text-lg font-bold">In use, but not in the lists yet</h2>
+          <p className="mb-3 text-sm text-muted">The server is set up with these right now. Add them so they show up in the settings.</p>
+          <ul className="mb-4 space-y-1 text-sm">
+            {missing.track && (
+              <li>
+                Track <code className="font-mono">{missing.track.id}</code>
+                {missing.track.layout && <> · layout <code className="font-mono">{missing.track.layout}</code></>}
+              </li>
+            )}
+            {missing.cars.map((c) => (
+              <li key={c.id}>
+                Car <code className="font-mono">{c.id}</code>
+                {c.skins.length > 0 && <span className="text-muted"> · {c.skins.length} skin{c.skins.length === 1 ? "" : "s"}</span>}
+              </li>
+            ))}
+          </ul>
+          <AddInUseButton instanceId={instance.id} />
+        </section>
+      )}
 
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="mb-4 font-display text-lg font-bold">Add a car</h2>

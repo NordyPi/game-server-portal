@@ -44,6 +44,7 @@ export function AssettoSettingsForm({
   const [tyreWear, setTyreWear] = useState(current.tyreWear);
   const [raceLaps, setRaceLaps] = useState(current.raceLaps === null ? null : String(current.raceLaps));
   const [startTime, setStartTime] = useState(formatTime(secondsFromSunAngle(current.sunAngle)));
+  const [cspVersion, setCspVersion] = useState(current.cspVersion === null ? "" : String(current.cspVersion));
 
   const track = tracks.find((t) => t.id === trackId);
   const layout = track?.layouts.find((l) => l.id === layoutId);
@@ -99,6 +100,26 @@ export function AssettoSettingsForm({
           {/* A disabled select isn't submitted, so send the single layout explicitly. */}
           {track && track.layouts.length < 2 && <input type="hidden" name="layout" value={layoutId} />}
           {layout?.pitboxes && <Hint>{layout.pitboxes} pit boxes</Hint>}
+        </Field>
+
+        <Field label="Requires CSP build" error={errors.cspVersion}>
+          <input
+            className="field font-mono"
+            type="number"
+            name="cspVersion"
+            min={1}
+            max={99999}
+            step={1}
+            value={cspVersion}
+            onChange={(e) => setCspVersion(e.target.value)}
+            placeholder="not required"
+          />
+          <input type="hidden" name="cspExtra" value={current.cspExtra} />
+          <Hint>
+            {cspVersion
+              ? `Players need Custom Shaders Patch build ${cspVersion} or newer to join. Leave empty to let anyone join.`
+              : "Anyone can join. Enter a CSP build number (like 4116) to require Custom Shaders Patch."}
+          </Hint>
         </Field>
       </div>
 

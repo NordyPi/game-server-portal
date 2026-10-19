@@ -59,6 +59,8 @@ test("settings can use hand-added cars, tracks and skins", async () => {
       password: "",
       track: "shuto_revival_project_beta",
       layout: "heiwajima_pa_n",
+      cspVersion: null,
+      cspExtra: "",
       entries: [
         { car: "rss_formula_hybrid_2021", skin: "01_blue", count: 1 },
         { car: "rss_formula_hybrid_2021", skin: "", count: 2 },

@@ -15,18 +15,26 @@ const BLOCK = "IgnoreConfigurationErrors";
 export function allowMissingContent(yaml: string): string {
   const eol = yaml.includes("\r\n") ? "\r\n" : "\n";
   const lines = yaml.split(/\r?\n/);
-  const start = lines.findIndex((l) => new RegExp(`^${BLOCK}:\\s*(\\{\\s*\\})?\\s*(#.*)?$`).test(l));
+  // Plugin settings follow the server's own settings, each starting with "---" and/or a
+  // "!PluginConfiguration" line. Only ever look at / write to the server's part before that.
+  let mainEnd = lines.findIndex((l, i) => (l.trimEnd() === "---" && i > 0) || l.startsWith("!"));
+  if (mainEnd < 0) mainEnd = lines.length;
+  const start = lines.findIndex((l, i) => i < mainEnd && new RegExp(`^${BLOCK}:\\s*(\\{\\s*\\})?\\s*(#.*)?$`).test(l));
 
   if (start < 0) {
-    while (lines.length && lines.at(-1) === "") lines.pop();
-    lines.push(`${BLOCK}:`, ...FLAGS.map((f) => `  ${f}: true`), "");
+    // Insert at the end of the server's part, before any blank lines that separate it from plugins.
+    let at = mainEnd;
+    while (at > 0 && lines[at - 1] === "") at--;
+    const block = [`${BLOCK}:`, ...FLAGS.map((f) => `  ${f}: true`)];
+    if (at === lines.length) block.push("");
+    lines.splice(at, 0, ...block);
     return lines.join(eol);
   }
 
   lines[start] = `${BLOCK}:`;
   // The block runs until the next line that isn't indented (blank lines and comments don't end it).
   let end = start + 1;
-  while (end < lines.length && (/^\s/.test(lines[end]) || lines[end] === "" || lines[end].startsWith("#"))) end++;
+  while (end < mainEnd && (/^\s/.test(lines[end]) || lines[end] === "" || lines[end].startsWith("#"))) end++;
   const indent = lines.slice(start + 1, end).find((l) => /^\s+\S/.test(l))?.match(/^\s+/)?.[0] ?? "  ";
 
   for (const flag of FLAGS) {
