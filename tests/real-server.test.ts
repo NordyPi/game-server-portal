@@ -97,11 +97,12 @@ test("cars, skins and the track the server uses can be added to the lists in one
 });
 
 test("extra_cfg.yml: the flags go into the server's own settings, never into a plugin's section", () => {
-  // Exactly like the real server's file (plugin section without a "---" line).
+  // Exactly like the real server's file: the plugin section lost its "---", which AssettoServer
+  // refuses to start with. It gets put back.
   const real = "EnablePlugins:\n  - AutoModerationPlugin\n\n!AutoModerationConfiguration\nWrongWayKick:\n  Enabled: false\n";
   assert.equal(
     allowMissingContent(real),
-    "EnablePlugins:\n  - AutoModerationPlugin\nIgnoreConfigurationErrors:\n  MissingCarChecksums: true\n  MissingTrackParams: true\n\n!AutoModerationConfiguration\nWrongWayKick:\n  Enabled: false\n",
+    "EnablePlugins:\n  - AutoModerationPlugin\nIgnoreConfigurationErrors:\n  MissingCarChecksums: true\n  MissingTrackParams: true\n\n---\n!AutoModerationConfiguration\nWrongWayKick:\n  Enabled: false\n",
   );
   // As in the AssettoServer docs, with "---".
   const documented = "EnableAi: false\n---\n!AutoModerationConfiguration\nIgnoreConfigurationErrors:\n  Nope: 1\n";

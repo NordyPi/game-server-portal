@@ -15,6 +15,14 @@ const BLOCK = "IgnoreConfigurationErrors";
 export function allowMissingContent(yaml: string): string {
   const eol = yaml.includes("\r\n") ? "\r\n" : "\n";
   const lines = yaml.split(/\r?\n/);
+  // Each plugin section must start with "---"; without it AssettoServer won't start ("While parsing
+  // a block mapping, did not find expected key"). Easy to lose when pasting plugin settings.
+  for (let i = lines.length - 1; i > 0; i--) {
+    if (!lines[i].startsWith("!")) continue;
+    let prev = i - 1;
+    while (prev >= 0 && lines[prev].trim() === "") prev--;
+    if (prev >= 0 && lines[prev].trimEnd() !== "---") lines.splice(i, 0, "---");
+  }
   // Plugin settings follow the server's own settings, each starting with "---" and/or a
   // "!PluginConfiguration" line. Only ever look at / write to the server's part before that.
   let mainEnd = lines.findIndex((l, i) => (l.trimEnd() === "---" && i > 0) || l.startsWith("!"));
