@@ -1,5 +1,7 @@
 # Game server portal
 
+> **Day-to-day use, start/stop commands, adding friends and mods, troubleshooting: see [HANDBOOK.md](HANDBOOK.md).**
+
 A small website on the home Linux server that lets friends manage our game servers without
 touching config files or a terminal: pick the track, layout and cars from lists, hit
 **Save & restart**, and the server comes back with the new setup.
