@@ -125,6 +125,7 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
                 <div className="font-mono text-xs text-muted">{c.id}</div>
                 <div className="mt-0.5 text-sm text-muted">
                   {c.skins.length ? `Skins: ${c.skins.join(", ")}` : "No skins listed (default skin)"}
+                  {savedCars.get(c.id)?.hiddenSkins?.length ? ` · ${savedCars.get(c.id)!.hiddenSkins!.length} hidden` : ""}
                 </div>
               </div>
               <Badges source={c} />
@@ -135,7 +136,7 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
                   entry={savedCars.get(c.id)!}
                   label={c.name}
                   onServer={c.onServer}
-                  serverExtras={skinsOnlyOnServer(c, savedCars.get(c.id)!)}
+                  serverSkins={skinsOnlyOnServer(c, savedCars.get(c.id)!)}
                 />
               )}
             </li>
@@ -164,9 +165,9 @@ function Badges({ source }: { source: Source }) {
   );
 }
 
-/** Skins from the server's skins/ folder or its current entry list: shown, but not editable on the page. */
+/** Skins from the server's skins/ folder or its current entry list (not typed in): removable, not renamable. */
 function skinsOnlyOnServer(car: Car, saved: ManualCar) {
-  return car.skins.filter((skin) => !saved.skins.includes(skin)).map((skin) => `skin ${skin}`);
+  return car.skins.filter((skin) => !saved.skins.includes(skin));
 }
 
 /** Layouts the server has files for that the saved entry doesn't list. */

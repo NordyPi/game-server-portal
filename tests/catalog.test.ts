@@ -3,8 +3,8 @@ import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import { type Catalog, loadCatalog, mergeContent, putEntry, saveCatalog } from "@/lib/games/assetto-corsa/catalog";
-import { scanContent } from "@/lib/games/assetto-corsa/content";
+import { type Catalog, editedCarSkins, loadCatalog, mergeContent, putEntry, saveCatalog, withoutHiddenSkins } from "@/lib/games/assetto-corsa/catalog";
+import { scanContent, type Content } from "@/lib/games/assetto-corsa/content";
 import { allowMissingContent } from "@/lib/games/assetto-corsa/extra-config";
 import { loadPresets, renameCarInPresets, savePresets, type EntryPreset } from "@/lib/games/assetto-corsa/entry-presets";
 import { validateSettings, writeSettings } from "@/lib/games/assetto-corsa/server-config";
@@ -159,4 +159,25 @@ test("saved grids follow a car whose folder name was corrected", () => {
   assert.equal(changed, 1);
   assert.deepEqual(presets[0].entries.map((e) => e.car), ["fixed_car", "other"]);
   assert.deepEqual(presets[1].entries.map((e) => e.car), ["fine_car", "other"]);
+});
+
+test("server skins removed in the editor are hidden from the lists, and can be brought back", () => {
+  // Form showed typed skin "my_livery" and the server's "rookie_5" + "rookie_9"; the user removed rookie_9.
+  const edit = editedCarSkins(["my_livery", "rookie_5"], ["rookie_5", "rookie_9"]);
+  assert.deepEqual(edit, { skins: ["my_livery"], hiddenSkins: ["rookie_9"] });
+
+  const content: Content = {
+    cars: [{ id: "rss_car", name: "RSS", brand: "", skins: ["my_livery", "rookie_5", "rookie_9"], onServer: true, manual: true }],
+    tracks: [],
+  };
+  const catalog: Catalog = { cars: [{ id: "rss_car", name: "RSS", skins: ["my_livery"], hiddenSkins: ["rookie_9"] }], tracks: [] };
+  assert.deepEqual(withoutHiddenSkins(content, catalog).cars[0].skins, ["my_livery", "rookie_5"]);
+
+  // Next edit: rookie_9 isn't shown any more; typing it back in un-hides it.
+  assert.deepEqual(editedCarSkins(["my_livery", "rookie_5", "rookie_9"], ["rookie_5"], ["rookie_9"]), {
+    skins: ["my_livery", "rookie_9"],
+    hiddenSkins: [],
+  });
+  // Adding (no server skins shown) never hides anything and keeps earlier hidden ones.
+  assert.deepEqual(editedCarSkins(["x"], [], ["rookie_9"]), { skins: ["x"], hiddenSkins: ["rookie_9"] });
 });

@@ -8,6 +8,7 @@ import path from "node:path";
 import {
   addMissingToCatalog,
   catalogFile,
+  editedCarSkins,
   getContent,
   loadCatalog,
   missingFromLists,
@@ -18,7 +19,7 @@ import {
   type Catalog,
   type ManualLayout,
 } from "@/lib/games/assetto-corsa/catalog";
-import { scanContent } from "@/lib/games/assetto-corsa/content";
+import { CONTENT_ID, scanContent } from "@/lib/games/assetto-corsa/content";
 import { parseEntryList } from "@/lib/games/assetto-corsa/entries";
 import { loadPresets, presetsFile, renameCarInPresets, savePresets } from "@/lib/games/assetto-corsa/entry-presets";
 import { readServerCfg } from "@/lib/games/assetto-corsa/server-config";
@@ -71,13 +72,17 @@ export async function saveCatalogCar(instanceId: string, form: FormData): Promis
   if (!parsed.success) return fail("Check the car's folder name.", fieldErrors(parsed.error));
   const car = parsed.data;
   const originalId = String(form.get("originalId") ?? "").trim();
+  // The server's own skins the edit form showed; one whose row was removed gets hidden.
+  const shownServerSkins = form.getAll("serverSkin").map(String).filter((s) => CONTENT_ID.test(s));
 
   const locked = await renameCheck(instance.dir, "cars", originalId, car.id);
   if (locked) return fail("Not saved.", { id: locked });
 
   let replaced = false;
   const error = await updateCatalog(instance.id, (c) => {
-    const result = putEntry(c.cars, car, originalId);
+    const before = c.cars.find((x) => x.id === (originalId || car.id));
+    const { skins, hiddenSkins } = editedCarSkins(car.skins, shownServerSkins, before?.hiddenSkins);
+    const result = putEntry(c.cars, { id: car.id, name: car.name, skins, ...(hiddenSkins.length ? { hiddenSkins } : {}) }, originalId);
     if (!result.ok) return result.error;
     c.cars = result.list;
     replaced = result.replaced;

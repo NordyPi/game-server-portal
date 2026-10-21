@@ -17,11 +17,18 @@ const idSchema = z.string().trim().regex(CONTENT_ID, "Use the exact folder name:
 const nameSchema = z.string().trim().max(100);
 const pitboxesSchema = z.number().int().min(1).max(128).nullable();
 
-/** Skin folder names from content/cars/<car>/skins/ on a player's PC. Optional: a car can have none listed. */
+const skinSchema = z.string().trim().regex(CONTENT_ID, "Skin names are folder names: letters, digits, _ . - and spaces only.");
+
 const manualCarSchema = z.object({
   id: idSchema,
   name: nameSchema,
-  skins: z.array(z.string().trim().regex(CONTENT_ID, "Skin names are folder names: letters, digits, _ . - and spaces only.")).default([]),
+  /** Skin folder names from content/cars/<car>/skins/ on a player's PC. Optional: a car can have none listed. */
+  skins: z.array(skinSchema).default([]),
+  /**
+   * Skins the server knows about (its skins/ folder or the entry list) that were removed in the
+   * editor. They're left out of the lists; the server's files are never touched.
+   */
+  hiddenSkins: z.array(skinSchema).optional(),
 });
 const manualLayoutSchema = z.object({ id: z.union([z.literal(""), idSchema]), name: nameSchema, pitboxes: pitboxesSchema });
 const manualTrackSchema = z.object({ id: idSchema, name: nameSchema, layouts: z.array(manualLayoutSchema).min(1) });
@@ -83,7 +90,35 @@ export async function getContent(instance: Instance): Promise<Content> {
     loadCatalog(catalogFile(instance.id)),
     readFile(path.join(instance.dir, "cfg", "entry_list.ini"), "utf8").catch(() => ""),
   ]);
-  return withEntryListSkins(mergeContent(scanned, catalog), parseEntryList(entryList));
+  return withoutHiddenSkins(withEntryListSkins(mergeContent(scanned, catalog), parseEntryList(entryList)), catalog);
+}
+
+/** Last step of getContent: drop skins removed in the editor, wherever they came from. */
+export function withoutHiddenSkins(content: Content, catalog: Catalog): Content {
+  const hidden = new Map(catalog.cars.filter((c) => c.hiddenSkins?.length).map((c) => [c.id, new Set(c.hiddenSkins)]));
+  if (hidden.size === 0) return content;
+  return {
+    ...content,
+    cars: content.cars.map((c) => (hidden.has(c.id) ? { ...c, skins: c.skins.filter((s) => !hidden.get(c.id)!.has(s)) } : c)),
+  };
+}
+
+/**
+ * Works out what to save for a car's skins after editing.
+ *  - submitted:   every skin row left in the form (typed ones and the server's own)
+ *  - shownServer: the server's skins the form showed (so removing one of their rows hides it)
+ *  - prevHidden:  skins already hidden before
+ * Typed skins that the server already knows aren't stored twice. Typing a hidden skin back in
+ * brings it back.
+ */
+export function editedCarSkins(submitted: string[], shownServer: string[], prevHidden: string[] = []) {
+  const kept = new Set(submitted);
+  const hidden = new Set([...prevHidden, ...shownServer.filter((s) => !kept.has(s))]);
+  for (const s of kept) hidden.delete(s);
+  return {
+    skins: submitted.filter((s) => !shownServer.includes(s)),
+    hiddenSkins: [...hidden].sort(),
+  };
 }
 
 /**

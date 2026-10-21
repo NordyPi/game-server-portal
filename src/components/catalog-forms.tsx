@@ -53,9 +53,16 @@ function useRows<T>(initial: T[], empty: T) {
   };
 }
 
-export function CarForm({ instanceId, initial, lockId, onDone }: FormProps<ManualCar>) {
+type SkinRow = { name: string; fromServer: boolean };
+
+export function CarForm({ instanceId, initial, lockId, onDone, serverSkins = [] }: FormProps<ManualCar> & { serverSkins?: string[] }) {
   const editing = Boolean(initial);
-  const skins = useRows(initial?.skins ?? [], "");
+  // Typed skins can be edited and removed; the server's own skins (its skins/ folder or the current
+  // entry list) can only be removed, which hides them from the lists.
+  const skins = useRows<SkinRow>(
+    [...(initial?.skins ?? []).map((name) => ({ name, fromServer: false })), ...serverSkins.map((name) => ({ name, fromServer: true }))],
+    { name: "", fromServer: false },
+  );
   const { formRef, onSubmit, pending, result, errors } = useCatalogForm(
     (f) => saveCatalogCar(instanceId, f),
     editing ? onDone : skins.reset,
@@ -64,6 +71,10 @@ export function CarForm({ instanceId, initial, lockId, onDone }: FormProps<Manua
   return (
     <form ref={formRef} onSubmit={onSubmit} className="space-y-3">
       {editing && <input type="hidden" name="originalId" value={initial!.id} />}
+      {/* Which server skins were on screen, so the save knows which ones were removed. */}
+      {serverSkins.map((name) => (
+        <input key={name} type="hidden" name="serverSkin" value={name} />
+      ))}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Folder name" error={errors.id} hint={lockId ? "This folder is on the server, so its name stays." : "Exactly as in content\\cars, e.g. ks_mazda_miata"}>
           <IdInput defaultValue={initial?.id} locked={lockId} />
@@ -84,13 +95,28 @@ export function CarForm({ instanceId, initial, lockId, onDone }: FormProps<Manua
           <div className="grid gap-2 sm:grid-cols-2">
             {skins.rows.map(({ key, value }) => (
               <div key={key} className="flex gap-2">
-                <input className="field font-mono" name="skin" defaultValue={value} placeholder="skin folder name" required maxLength={100} autoComplete="off" spellCheck={false} />
-                <button type="button" className="btn" onClick={() => skins.remove(key)} title="Remove skin">✕</button>
+                {value.fromServer ? (
+                  <>
+                    <input type="hidden" name="skin" value={value.name} />
+                    <span className="field flex items-center gap-2 truncate font-mono" title="Found on the server. ✕ hides it from the skin lists; the server's files stay.">
+                      <span className="truncate">{value.name}</span>
+                      <span className="ml-auto shrink-0 rounded-full bg-surface px-2 py-0.5 font-sans text-xs text-muted">on server</span>
+                    </span>
+                  </>
+                ) : (
+                  <input className="field font-mono" name="skin" defaultValue={value.name} placeholder="skin folder name" required maxLength={100} autoComplete="off" spellCheck={false} />
+                )}
+                <button type="button" className="btn" onClick={() => skins.remove(key)} title={value.fromServer ? "Hide this skin" : "Remove skin"}>✕</button>
               </div>
             ))}
           </div>
         )}
         {errors.skins && <p className="mt-1 text-sm text-danger">{errors.skins}</p>}
+        {initial?.hiddenSkins?.length ? (
+          <p className="mt-1 text-xs text-muted">
+            Hidden: {initial.hiddenSkins.join(", ")}. Add one again with + to bring it back.
+          </p>
+        ) : null}
         <button type="button" className="mt-2 text-sm text-accent hover:underline" onClick={skins.add}>
           + Add a skin
         </button>
@@ -180,7 +206,7 @@ export function TrackForm({ instanceId, initial, lockId, onDone }: FormProps<Man
  */
 export function EntryActions(
   props:
-    | { instanceId: string; kind: "car"; entry: ManualCar; label: string; onServer: boolean; serverExtras: string[] }
+    | { instanceId: string; kind: "car"; entry: ManualCar; label: string; onServer: boolean; serverSkins: string[] }
     | { instanceId: string; kind: "track"; entry: ManualTrack; label: string; onServer: boolean; serverExtras: string[] },
 ) {
   const [editing, setEditing] = useState(false);
@@ -205,15 +231,15 @@ export function EntryActions(
       </span>
       {editing && (
         <div className="mt-2 basis-full rounded-lg border border-border bg-surface-2 p-4">
-          {props.serverExtras.length > 0 && (
-            <p className="mb-3 text-xs text-muted">
-              Also found on the server (not editable here): {props.serverExtras.join(", ")}
-            </p>
-          )}
           {props.kind === "car" ? (
-            <CarForm instanceId={props.instanceId} initial={props.entry} lockId={props.onServer} onDone={close} />
+            <CarForm instanceId={props.instanceId} initial={props.entry} lockId={props.onServer} onDone={close} serverSkins={props.serverSkins} />
           ) : (
-            <TrackForm instanceId={props.instanceId} initial={props.entry} lockId={props.onServer} onDone={close} />
+            <>
+              {props.serverExtras.length > 0 && (
+                <p className="mb-3 text-xs text-muted">Also found on the server (not editable here): {props.serverExtras.join(", ")}</p>
+              )}
+              <TrackForm instanceId={props.instanceId} initial={props.entry} lockId={props.onServer} onDone={close} />
+            </>
           )}
         </div>
       )}

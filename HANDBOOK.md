@@ -85,7 +85,7 @@ The server only needs the mod's **folder name**. Every player needs the mod inst
 The **In use, but not in the lists yet** box on that page adds everything the server is currently set up
 with in one click.
 
-Made a mistake? Click **Edit** next to a hand-added car or track to change its display name, skins, layouts or folder name. Saved grids follow a corrected car folder name automatically. Folders that exist on the server keep their name, and their server skins/layouts can't be removed from the page.
+Made a mistake? Click **Edit** next to a hand-added car or track to change its display name, skins, layouts or folder name. Saved grids follow a corrected car folder name automatically. Folders that exist on the server keep their name. Skins the server provides (its `skins/` folder or the current entry list) show as **on server**: ✕ hides one from the skin lists without touching any files, and typing its name back in with **+ Add a skin** brings it back.
 
 ---
 
