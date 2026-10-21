@@ -41,6 +41,9 @@ export function AssettoSettingsForm({
   const [layoutId, setLayoutId] = useState(currentTrackInstalled ? current.layout : "");
   const [rows, setRows] = useState<Row[]>(() => toRows(current.entries));
   const [damage, setDamage] = useState(current.damage);
+  // Kept as text while typing (like race laps) so "-" and an empty box are possible.
+  const [trackTemp, setTrackTemp] = useState(String(current.trackTemp));
+  const [airTemp, setAirTemp] = useState(String(current.airTemp));
   const [tyreWear, setTyreWear] = useState(current.tyreWear);
   const [raceLaps, setRaceLaps] = useState(current.raceLaps === null ? null : String(current.raceLaps));
   const [startTime, setStartTime] = useState(formatTime(secondsFromSunAngle(current.sunAngle)));
@@ -191,6 +194,16 @@ export function AssettoSettingsForm({
         <div className="grid gap-5 sm:grid-cols-2">
           <Slider label="Damage" name="damage" value={damage} onChange={setDamage} error={errors.damage} left="No damage" right="Full damage" />
           <Slider label="Tyre wear" name="tyreWear" value={tyreWear} onChange={setTyreWear} error={errors.tyreWear} left="No wear" right="Normal wear" />
+          <Field label="Air temperature (°C)" error={errors.airTemp}>
+            <input className="field" type="number" name="airTemp" min={-20} max={50} step={1} value={airTemp} onChange={(e) => setAirTemp(e.target.value)} required />
+          </Field>
+          <Field label="Track: degrees above air" error={errors.trackTemp}>
+            <input className="field" type="number" name="trackTemp" min={-10} max={30} step={1} value={trackTemp} onChange={(e) => setTrackTemp(e.target.value)} required />
+            {/* AssettoServer: road temperature = air temperature + this number. */}
+            {airTemp !== "" && trackTemp !== "" && Number.isFinite(Number(airTemp) + Number(trackTemp)) && (
+              <Hint>Track ≈ {Number(airTemp) + Number(trackTemp)} °C</Hint>
+            )}
+          </Field>
           <Field label="Race laps" error={errors.raceLaps}>
             {raceLaps === null ? (
               <p className="text-sm text-muted">This server has no race session (only practice/free-roam), so there are no laps to set.</p>

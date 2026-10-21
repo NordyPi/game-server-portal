@@ -56,6 +56,8 @@ export async function applyAssettoSettings(instanceId: string, _prev: ApplyState
       tyreWear: Number(text("tyreWear")),
       raceLaps: form.has("raceLaps") ? Number(text("raceLaps")) : null,
       startTime: text("startTime"),
+      trackTemp: Number(text("trackTemp")),
+      airTemp: Number(text("airTemp")),
     },
     content,
   );
@@ -90,6 +92,8 @@ export async function applyAssettoSettings(instanceId: string, _prev: ApplyState
     }
     if (before.settings.damage !== settings.damage) changes.push(`damage ${settings.damage}%`);
     if (before.settings.tyreWear !== settings.tyreWear) changes.push(`tyre wear ${settings.tyreWear}%`);
+    if (before.settings.airTemp !== settings.airTemp) changes.push(`air ${settings.airTemp} °C`);
+    if (before.settings.trackTemp !== settings.trackTemp) changes.push(`track +${settings.trackTemp}° above air`);
     if (before.settings.raceLaps !== settings.raceLaps && settings.raceLaps !== null) changes.push(`${settings.raceLaps} race laps`);
     if (before.settings.sunAngle !== settings.sunAngle) changes.push(`start time ${startTimeOf(settings.sunAngle)}`);
     if (before.settings.name !== settings.name) changes.push(`name → "${settings.name}"`);

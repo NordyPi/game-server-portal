@@ -70,6 +70,8 @@ test("settings can use hand-added cars, tracks and skins", async () => {
       tyreWear: 100,
       raceLaps: 5,
       startTime: "22:00",
+      trackTemp: 6,
+      airTemp: 18,
     },
     content,
   );

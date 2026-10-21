@@ -28,6 +28,13 @@ export type AcSettings = {
   entries: EntryRow[];
   /** Percent, 0 = no damage. */
   damage: number;
+  /**
+   * [WEATHER_0] BASE_TEMPERATURE_ROAD: degrees the track is *above* the air, not a temperature
+   * of its own (AssettoServer: road = ambient + this).
+   */
+  trackTemp: number;
+  /** [WEATHER_0] BASE_TEMPERATURE_AMBIENT, °C. */
+  airTemp: number;
   /** Percent, 0 = tyres never wear. */
   tyreWear: number;
   /** null when server_cfg.ini has no [RACE] session (e.g. practice-only / free-roam servers). */
@@ -75,6 +82,8 @@ export async function readServerCfg(dir: string): Promise<{ settings: AcSettings
       cspExtra: trackSetting.cspExtra,
       entries,
       damage: int("DAMAGE_MULTIPLIER") ?? 100,
+      trackTemp: int("BASE_TEMPERATURE_ROAD", "WEATHER_0") ?? 6,
+      airTemp: int("BASE_TEMPERATURE_AMBIENT", "WEATHER_0") ?? 18,
       tyreWear: int("TYRE_WEAR_RATE") ?? 100,
       raceLaps: ini.sections().includes("RACE") ? (int("LAPS", "RACE") || DEFAULT_LAPS) : null,
       sunAngle: int("SUN_ANGLE") ?? 0,
@@ -131,6 +140,9 @@ export function validateSettings(
   const percent = (v: number) => Number.isInteger(v) && v >= 0 && v <= 100;
   if (!percent(input.damage)) errors.damage = "0 to 100.";
   if (!percent(input.tyreWear)) errors.tyreWear = "0 to 100.";
+  const between = (v: number, min: number, max: number) => Number.isInteger(v) && v >= min && v <= max;
+  if (!between(input.airTemp, -20, 50)) errors.airTemp = "A whole number from -20 to 50 °C.";
+  if (!between(input.trackTemp, -10, 30)) errors.trackTemp = "A whole number from -10 to 30.";
   if (input.raceLaps !== null && (!Number.isInteger(input.raceLaps) || input.raceLaps < 1 || input.raceLaps > 999)) {
     errors.raceLaps = "A whole number of laps, 1 or more.";
   }
@@ -156,6 +168,8 @@ export function validateSettings(
       tyreWear: input.tyreWear,
       raceLaps: input.raceLaps,
       sunAngle: sunAngleFromSeconds(seconds!),
+      trackTemp: input.trackTemp,
+      airTemp: input.airTemp,
     },
   };
 }
@@ -185,6 +199,11 @@ export async function writeSettings(dir: string, settings: AcSettings, content: 
   ini.set("SERVER", "DAMAGE_MULTIPLIER", String(settings.damage));
   ini.set("SERVER", "TYRE_WEAR_RATE", String(settings.tyreWear));
   ini.set("SERVER", "SUN_ANGLE", String(settings.sunAngle));
+  // Only the first weather, and only if it exists: a [WEATHER_0] without GRAPHICS would break the server.
+  if (ini.sections().includes("WEATHER_0")) {
+    ini.set("WEATHER_0", "BASE_TEMPERATURE_ROAD", String(settings.trackTemp));
+    ini.set("WEATHER_0", "BASE_TEMPERATURE_AMBIENT", String(settings.airTemp));
+  }
   // Only edit an existing race session; adding [RACE] would change which sessions the server runs.
   if (settings.raceLaps !== null && ini.sections().includes("RACE")) ini.set("RACE", "LAPS", String(settings.raceLaps));
 

@@ -64,6 +64,8 @@ test("reads the current settings, grid and ports", async () => {
       { car: "ks_toyota_ae86_drift", skin: "panda", count: 2 },
     ],
     damage: 50,
+    trackTemp: 7,
+    airTemp: 21,
     tyreWear: 100, // not in the file: default
     raceLaps: 10,
     sunAngle: 48,
@@ -98,6 +100,8 @@ const good: AcSettingsInput = {
   damage: 0,
   tyreWear: 35,
   raceLaps: 7,
+  trackTemp: 6,
+  airTemp: 18,
   startTime: "09:30",
 };
 
@@ -123,6 +127,11 @@ test("validation rejects unknown content, too many slots, bad numbers and line b
   assert.ok(bad({ raceLaps: 2.5 }).raceLaps);
   assert.equal(bad({ raceLaps: null }).raceLaps, undefined);
   assert.ok(bad({ startTime: "25:00" }).startTime);
+  assert.ok(bad({ airTemp: Number.NaN }).airTemp);
+  assert.ok(bad({ airTemp: 51 }).airTemp);
+  assert.ok(bad({ trackTemp: 31 }).trackTemp);
+  assert.ok(bad({ trackTemp: 2.5 }).trackTemp);
+  assert.equal(bad({ airTemp: -5, trackTemp: -2 }).airTemp, undefined);
   assert.ok(bad({ startTime: "2pm" }).startTime);
   assert.ok(bad({ name: "a\r\nTRACK=x" }).name);
   assert.ok(bad({ password: "a;b" }).password);
@@ -145,6 +154,8 @@ test("applying settings edits only the managed keys and keeps comments, other se
   assert.match(after, /\r\nDAMAGE_MULTIPLIER=0\r\n/);
   assert.match(after, /\r\nTYRE_WEAR_RATE=35\r\n\r\n\[PRACTICE\]/); // added at the end of [SERVER]
   assert.match(after, /\[PRACTICE\]\r\nNAME=Practice\r\nTIME=60\r\n/);
+  assert.match(after, /\[WEATHER_0\]\r\nGRAPHICS=3_clear\r\nBASE_TEMPERATURE_AMBIENT=18\r\nBASE_TEMPERATURE_ROAD=6\r\n/);
+  assert.doesNotMatch(after, /\[SERVER\][^[]*BASE_TEMPERATURE/); // never written into [SERVER]
   assert.match(after, /\[RACE\]\r\nNAME=Race\r\nLAPS=7\r\nWAIT_TIME=60\r\n$/);
   assert.equal(after.split("\n").length, before.split("\n").length + 1);
   assert.equal(await readFile(path.join(dir, "cfg", "server_cfg.ini.bak"), "utf8"), before);
