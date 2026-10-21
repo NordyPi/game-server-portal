@@ -3,10 +3,10 @@ import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import { loadCatalog, mergeContent, saveCatalog, type Catalog } from "@/lib/games/assetto-corsa/catalog";
+import { type Catalog, loadCatalog, mergeContent, putEntry, saveCatalog } from "@/lib/games/assetto-corsa/catalog";
 import { scanContent } from "@/lib/games/assetto-corsa/content";
 import { allowMissingContent } from "@/lib/games/assetto-corsa/extra-config";
-import { loadPresets, savePresets, type EntryPreset } from "@/lib/games/assetto-corsa/entry-presets";
+import { loadPresets, renameCarInPresets, savePresets, type EntryPreset } from "@/lib/games/assetto-corsa/entry-presets";
 import { validateSettings, writeSettings } from "@/lib/games/assetto-corsa/server-config";
 
 const fixture = path.join(import.meta.dirname, "fixtures", "assetto-corsa");
@@ -128,4 +128,35 @@ test("entry list presets round-trip, sorted by name", async () => {
   const preset = (name: string): EntryPreset => ({ name, entries: [{ car: "ks_mazda_miata", skin: "red", count: 4 }], savedBy: "Alex", savedAt: "2026-10-17T10:00:00.000Z" });
   await savePresets(file, [preset("Touge"), preset("drift night")]);
   assert.deepEqual((await loadPresets(file)).map((p) => p.name), ["drift night", "Touge"]);
+});
+
+test("editing keeps an entry in place, can fix its folder name, but won't clash with another", () => {
+  const list = [
+    { id: "a_car", name: "A" },
+    { id: "typo_car", name: "B" },
+    { id: "c_car", name: "C" },
+  ];
+  // Editing the name only.
+  const named = putEntry(list, { id: "typo_car", name: "Better B" }, "typo_car");
+  assert.ok(named.ok && named.replaced);
+  assert.deepEqual(named.ok && named.list.map((x) => `${x.id}:${x.name}`), ["a_car:A", "typo_car:Better B", "c_car:C"]);
+  // Fixing the folder name keeps the position.
+  const fixed = putEntry(list, { id: "fixed_car", name: "B" }, "typo_car");
+  assert.deepEqual(fixed.ok && fixed.list.map((x) => x.id), ["a_car", "fixed_car", "c_car"]);
+  // Renaming onto a folder name that's already in the list is refused.
+  const clash = putEntry(list, { id: "c_car", name: "B" }, "typo_car");
+  assert.equal(clash.ok, false);
+  // Adding (no originalId) appends, or replaces the same folder name as before.
+  const added = putEntry(list, { id: "d_car", name: "D" });
+  assert.ok(added.ok && !added.replaced && added.list.length === 4);
+  const same = putEntry(list, { id: "a_car", name: "A2" });
+  assert.ok(same.ok && same.replaced && same.list.length === 3);
+});
+
+test("saved grids follow a car whose folder name was corrected", () => {
+  const preset = (name: string, car: string): EntryPreset => ({ name, entries: [{ car, skin: "red", count: 2 }, { car: "other", skin: "", count: 1 }], savedBy: "Alex", savedAt: "2026-10-21T10:00:00.000Z" });
+  const { presets, changed } = renameCarInPresets([preset("One", "typo_car"), preset("Two", "fine_car")], "typo_car", "fixed_car");
+  assert.equal(changed, 1);
+  assert.deepEqual(presets[0].entries.map((e) => e.car), ["fixed_car", "other"]);
+  assert.deepEqual(presets[1].entries.map((e) => e.car), ["fine_car", "other"]);
 });

@@ -37,6 +37,25 @@ export type Catalog = z.infer<typeof catalogSchema>;
 
 export { manualCarSchema, manualTrackSchema };
 
+/**
+ * Adds an entry, or replaces the one with the same folder name. When editing, `originalId` is the
+ * folder name it had before: the entry keeps its place in the list and may get a new folder name
+ * (to fix a typo), unless another entry already has that name.
+ */
+export function putEntry<T extends { id: string }>(
+  list: T[],
+  entry: T,
+  originalId?: string,
+): { ok: true; list: T[]; replaced: boolean } | { ok: false; error: string } {
+  const from = originalId || entry.id;
+  if (from !== entry.id && list.some((x) => x.id === entry.id)) {
+    return { ok: false, error: `“${entry.id}” is already in the list. Edit that one instead.` };
+  }
+  const at = list.findIndex((x) => x.id === from);
+  if (at < 0) return { ok: true, list: [...list, entry], replaced: false };
+  return { ok: true, list: list.map((x, i) => (i === at ? entry : x)), replaced: true };
+}
+
 export function catalogFile(instanceId: string) {
   return path.join(dataDir(), `catalog-${instanceId}.json`);
 }

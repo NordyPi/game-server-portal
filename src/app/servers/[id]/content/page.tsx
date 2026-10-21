@@ -3,12 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { AddCarForm, AddInUseButton, AddTrackForm, RemoveEntryButton } from "@/components/catalog-forms";
+import { AddInUseButton, CarForm, CatalogToast, EntryActions, TrackForm } from "@/components/catalog-forms";
 import { getInstance } from "@/lib/config";
-import { getContent, missingFromLists } from "@/lib/games/assetto-corsa/catalog";
+import { catalogFile, getContent, loadCatalog, missingFromLists, type ManualCar, type ManualTrack } from "@/lib/games/assetto-corsa/catalog";
 import { parseEntryList } from "@/lib/games/assetto-corsa/entries";
 import { readServerCfg } from "@/lib/games/assetto-corsa/server-config";
-import type { Source } from "@/lib/games/assetto-corsa/content";
+import type { Car, Source, Track } from "@/lib/games/assetto-corsa/content";
 import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Cars & tracks" };
@@ -17,16 +17,22 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
   await requireUser();
   const instance = getInstance((await params).id);
   if (instance?.game !== "assetto-corsa") notFound();
-  const [content, cfg, entryList] = await Promise.all([
+  const [content, cfg, entryList, catalog] = await Promise.all([
     getContent(instance),
     readServerCfg(instance.dir),
     readFile(path.join(instance.dir, "cfg", "entry_list.ini"), "utf8").catch(() => ""),
+    // The saved hand-added entries, exactly as stored: what the edit forms start from.
+    loadCatalog(catalogFile(instance.id)),
   ]);
   const { cars, tracks } = content;
+  // Only hand-added entries (the ones in data/catalog-*.json) can be edited or removed.
+  const savedCars = new Map(catalog.cars.map((c) => [c.id, c]));
+  const savedTracks = new Map(catalog.tracks.map((t) => [t.id, t]));
   const missing = cfg ? missingFromLists({ ...cfg.settings, cars: cfg.cars }, parseEntryList(entryList), content) : null;
 
   return (
     <div className="space-y-8">
+      <CatalogToast />
       <div>
         <Link href={`/servers/${instance.id}`} className="text-sm text-muted hover:text-accent">← {instance.name}</Link>
         <h1 className="mt-1 font-display text-2xl font-bold">Cars & tracks</h1>
@@ -62,12 +68,12 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
 
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="mb-4 font-display text-lg font-bold">Add a car</h2>
-        <AddCarForm instanceId={instance.id} />
+        <CarForm instanceId={instance.id} />
       </section>
 
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="mb-4 font-display text-lg font-bold">Add a track</h2>
-        <AddTrackForm instanceId={instance.id} />
+        <TrackForm instanceId={instance.id} />
       </section>
 
       <section>
@@ -93,7 +99,16 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
                 )}
               </div>
               <Badges source={t} />
-              {t.manual && <RemoveEntryButton instanceId={instance.id} kind="track" id={t.id} label={t.name} />}
+              {savedTracks.has(t.id) && (
+                <EntryActions
+                  instanceId={instance.id}
+                  kind="track"
+                  entry={savedTracks.get(t.id)!}
+                  label={t.name}
+                  onServer={t.onServer}
+                  serverExtras={layoutsOnlyOnServer(t, savedTracks.get(t.id)!)}
+                />
+              )}
             </li>
           ))}
           {tracks.length === 0 && <li className="px-4 py-3 text-sm text-muted">No tracks yet. Add one above.</li>}
@@ -113,7 +128,16 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
                 </div>
               </div>
               <Badges source={c} />
-              {c.manual && <RemoveEntryButton instanceId={instance.id} kind="car" id={c.id} label={c.name} />}
+              {savedCars.has(c.id) && (
+                <EntryActions
+                  instanceId={instance.id}
+                  kind="car"
+                  entry={savedCars.get(c.id)!}
+                  label={c.name}
+                  onServer={c.onServer}
+                  serverExtras={skinsOnlyOnServer(c, savedCars.get(c.id)!)}
+                />
+              )}
             </li>
           ))}
           {cars.length === 0 && <li className="px-4 py-3 text-sm text-muted">No cars yet. Add one above.</li>}
@@ -138,4 +162,16 @@ function Badges({ source }: { source: Source }) {
       )}
     </span>
   );
+}
+
+/** Skins from the server's skins/ folder or its current entry list: shown, but not editable on the page. */
+function skinsOnlyOnServer(car: Car, saved: ManualCar) {
+  return car.skins.filter((skin) => !saved.skins.includes(skin)).map((skin) => `skin ${skin}`);
+}
+
+/** Layouts the server has files for that the saved entry doesn't list. */
+function layoutsOnlyOnServer(track: Track, saved: ManualTrack) {
+  return track.layouts
+    .filter((l) => l.onServer && !saved.layouts.some((s) => s.id === l.id))
+    .map((l) => `layout ${l.id || "(no sub-folder)"}`);
 }

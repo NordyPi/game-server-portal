@@ -85,7 +85,7 @@ The server only needs the mod's **folder name**. Every player needs the mod inst
 The **In use, but not in the lists yet** box on that page adds everything the server is currently set up
 with in one click.
 
-To give a car or track a nicer name, add it again with the same folder name.
+Made a mistake? Click **Edit** next to a hand-added car or track to change its display name, skins, layouts or folder name. Saved grids follow a corrected car folder name automatically. Folders that exist on the server keep their name, and their server skins/layouts can't be removed from the page.
 
 ---
 

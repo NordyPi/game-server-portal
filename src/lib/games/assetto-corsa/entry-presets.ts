@@ -50,3 +50,14 @@ export async function savePresets(file: string, presets: EntryPreset[]) {
   await writeFile(tmp, JSON.stringify({ presets: sorted }, null, 2) + "\n", "utf8");
   await rename(tmp, file);
 }
+
+/** After a car's folder name is corrected on the Cars & tracks page, saved grids follow it. */
+export function renameCarInPresets(presets: EntryPreset[], from: string, to: string): { presets: EntryPreset[]; changed: number } {
+  let changed = 0;
+  const updated = presets.map((p) => {
+    if (!p.entries.some((e) => e.car === from)) return p;
+    changed++;
+    return { ...p, entries: p.entries.map((e) => (e.car === from ? { ...e, car: to } : e)) };
+  });
+  return { presets: updated, changed };
+}
