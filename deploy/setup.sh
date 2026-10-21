@@ -3,6 +3,8 @@
 #   cd ~/game-server-portal && ./deploy/setup.sh
 # Safe to run again.
 set -eu
+# Always the system Node.js 24 (/usr/bin), even if nvm put an older one first in this terminal.
+export PATH="/usr/bin:$PATH"
 cd "$(dirname "$0")/.."
 here="$(pwd)"
 
