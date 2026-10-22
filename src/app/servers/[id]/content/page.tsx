@@ -76,8 +76,7 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
         <TrackForm instanceId={instance.id} />
       </section>
 
-      <section>
-        <h2 className="mb-2 font-display text-lg font-bold">Tracks ({tracks.length})</h2>
+      <Collapsible title="Tracks" count={tracks.length}>
         <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
           {tracks.map((t) => (
             <li key={t.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-3">
@@ -113,10 +112,9 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
           ))}
           {tracks.length === 0 && <li className="px-4 py-3 text-sm text-muted">No tracks yet. Add one above.</li>}
         </ul>
-      </section>
+      </Collapsible>
 
-      <section>
-        <h2 className="mb-2 font-display text-lg font-bold">Cars ({cars.length})</h2>
+      <Collapsible title="Cars" count={cars.length}>
         <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
           {cars.map((c) => (
             <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
@@ -143,8 +141,28 @@ export default async function ContentPage({ params }: PageProps<"/servers/[id]/c
           ))}
           {cars.length === 0 && <li className="px-4 py-3 text-sm text-muted">No cars yet. Add one above.</li>}
         </ul>
-      </section>
+      </Collapsible>
     </div>
+  );
+}
+
+/**
+ * A list that starts folded: clicking its heading opens or closes it. A native <details>, so it
+ * needs no JavaScript, works with the keyboard, and stays open when the page refreshes after an edit.
+ */
+function Collapsible({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  return (
+    <details className="group">
+      <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 rounded-lg py-1 hover:text-accent [&::-webkit-details-marker]:hidden">
+        <span aria-hidden className="text-muted transition-transform group-open:rotate-90">▸</span>
+        <h2 className="font-display text-lg font-bold">
+          {title} ({count})
+        </h2>
+        <span className="ml-auto text-sm text-muted group-open:hidden">Show</span>
+        <span className="ml-auto hidden text-sm text-muted group-open:inline">Hide</span>
+      </summary>
+      {children}
+    </details>
   );
 }
 
