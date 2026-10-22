@@ -9,6 +9,7 @@ import { getInstance, type Instance } from "@/lib/config";
 import { getContent } from "@/lib/games/assetto-corsa/catalog";
 import { loadPresets, presetsFile } from "@/lib/games/assetto-corsa/entry-presets";
 import { readServerCfg } from "@/lib/games/assetto-corsa/server-config";
+import { loadRememberedSessions, sessionMemoryFile } from "@/lib/games/assetto-corsa/session-memory";
 import { initialLive } from "@/lib/live";
 import { requireUser } from "@/lib/session";
 
@@ -57,7 +58,8 @@ export default async function ServerPage({ params }: PageProps<"/servers/[id]">)
 async function SettingsPanel({ instance }: { instance: Instance }) {
   switch (instance.game) {
     case "assetto-corsa": {
-      const [content, cfg, presets] = await Promise.all([getContent(instance), readServerCfg(instance.dir), loadPresets(presetsFile(instance.id))]);
+      const remembered = await loadRememberedSessions(sessionMemoryFile(instance.id));
+      const [content, cfg, presets] = await Promise.all([getContent(instance), readServerCfg(instance.dir, remembered), loadPresets(presetsFile(instance.id))]);
       if (!cfg) {
         return <p className="text-danger">No <code>cfg/server_cfg.ini</code> in <code>{instance.dir}</code>. Copy your server config there first.</p>;
       }

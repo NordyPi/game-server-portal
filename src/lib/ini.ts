@@ -61,7 +61,67 @@ export class IniFile {
     else this.lines.push({ kind: "section", name: s, raw: `[${s}]` }, pair);
   }
 
+  hasSection(section: string) {
+    const s = section.toUpperCase();
+    return this.lines.some((l) => l.kind === "section" && l.name === s);
+  }
+
+  /**
+   * Removes a section and its keys. Blank lines and comments right before the next section stay
+   * (they belong to that one), and the gap left behind is closed up to a single blank line.
+   */
+  removeSection(section: string) {
+    const s = section.toUpperCase();
+    const start = this.lines.findIndex((l) => l.kind === "section" && l.name === s);
+    if (start < 0) return;
+    let end = this.lines.findIndex((l, i) => i > start && l.kind === "section");
+    if (end < 0) end = this.lines.length;
+    while (end > start + 1 && this.lines[end - 1].kind === "other" && end < this.lines.length) end--;
+    this.lines.splice(start, end - start);
+    // Collapse the blank lines that now meet where the section was.
+    const at = start;
+    while (at > 0 && at < this.lines.length && isBlank(this.lines[at - 1]) && isBlank(this.lines[at])) {
+      this.lines.splice(at, 1);
+    }
+    while (this.lines.length && isBlank(this.lines.at(-1)!)) this.lines.pop();
+  }
+
+  /**
+   * Adds a new section with these keys, placed before the first of `before` that exists (or, failing
+   * that, after the last of `after` that exists; otherwise at the end), with blank lines around it.
+   */
+  addSection(section: string, pairs: [string, string][], place: { before?: string[]; after?: string[] } = {}) {
+    const s = section.toUpperCase();
+    if (this.hasSection(s)) throw new Error(`[${s}] already exists`);
+    for (const [k, v] of pairs) if (/[\r\n]/.test(v)) throw new Error(`${k}: value can't contain line breaks`);
+    const header = (name: string) => this.lines.findIndex((l) => l.kind === "section" && l.name === name.toUpperCase());
+    const sectionEnd = (start: number) => {
+      let end = this.lines.findIndex((l, i) => i > start && l.kind === "section");
+      if (end < 0) end = this.lines.length;
+      while (end > start + 1 && isBlank(this.lines[end - 1])) end--;
+      return end;
+    };
+
+    let at = this.lines.length;
+    const nextIndex = (place.before ?? []).map(header).filter((i) => i >= 0).sort((a, b) => a - b)[0];
+    const prevIndex = (place.after ?? []).map(header).filter((i) => i >= 0).sort((a, b) => b - a)[0];
+    if (nextIndex !== undefined) at = nextIndex;
+    else if (prevIndex !== undefined) at = sectionEnd(prevIndex);
+
+    const block: Line[] = [
+      { kind: "section", name: s, raw: `[${s}]` },
+      ...pairs.map(([k, v]): Line => ({ kind: "pair", section: s, key: k.toUpperCase(), value: v, raw: `${k.toUpperCase()}=${v}` })),
+    ];
+    if (at > 0 && !isBlank(this.lines[at - 1])) block.unshift({ kind: "other", raw: "" });
+    if (at < this.lines.length && !isBlank(this.lines[at])) block.push({ kind: "other", raw: "" });
+    this.lines.splice(at, 0, ...block);
+  }
+
   toString() {
     return this.lines.map((l) => l.raw).join(this.eol) + this.eol;
   }
+}
+
+function isBlank(line: Line) {
+  return line.kind === "other" && line.raw.trim() === "";
 }

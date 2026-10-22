@@ -68,7 +68,11 @@ test("settings can use hand-added cars, tracks and skins", async () => {
       ],
       damage: 100,
       tyreWear: 100,
-      raceLaps: 5,
+      sessions: {
+        practice: { enabled: false, minutes: 30, canJoin: true },
+        qualify: { enabled: false, minutes: 5, canJoin: true },
+        race: { enabled: true, laps: 5, join: 1 },
+      },
       startTime: "22:00",
       trackTemp: 6,
       airTemp: 18,

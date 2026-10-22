@@ -6,6 +6,8 @@ import { logActivity } from "@/lib/activity";
 import { getInstance } from "@/lib/config";
 import { getContent } from "@/lib/games/assetto-corsa/catalog";
 import { entryRowSchema } from "@/lib/games/assetto-corsa/entry-presets";
+import { rememberSessions, sessionMemoryFile } from "@/lib/games/assetto-corsa/session-memory";
+import { sessionChanges, sessionsSchema } from "@/lib/games/assetto-corsa/sessions";
 import { readServerCfg, startTimeOf, validateSettings, writeSettings, type ValidationErrors } from "@/lib/games/assetto-corsa/server-config";
 import { withInstanceLock } from "@/lib/locks";
 import { controlService, type ServiceAction } from "@/lib/service";
@@ -41,6 +43,9 @@ export async function applyAssettoSettings(instanceId: string, _prev: ApplyState
   // The grid comes as JSON from a hidden field; check its shape before anything else looks at it.
   const entries = z.array(entryRowSchema).safeParse(parseJson(text("entries")));
   if (!entries.success) return { ok: false, message: "The grid didn't come through. Reload the page and try again.", errors: {} };
+  // The events (practice / qualify / race) come the same way.
+  const sessions = sessionsSchema.safeParse(parseJson(text("sessions")));
+  if (!sessions.success) return { ok: false, message: "The events didn't come through. Reload the page and try again.", errors: {} };
 
   const content = await getContent(instance);
   const result = validateSettings(
@@ -54,7 +59,7 @@ export async function applyAssettoSettings(instanceId: string, _prev: ApplyState
       entries: entries.data,
       damage: Number(text("damage")),
       tyreWear: Number(text("tyreWear")),
-      raceLaps: form.has("raceLaps") ? Number(text("raceLaps")) : null,
+      sessions: sessions.data,
       startTime: text("startTime"),
       trackTemp: Number(text("trackTemp")),
       airTemp: Number(text("airTemp")),
@@ -69,6 +74,8 @@ export async function applyAssettoSettings(instanceId: string, _prev: ApplyState
     if (!before) return { ok: false, message: "cfg/server_cfg.ini is missing on the server.", errors: {} };
     await withInstanceLock(instance.id, async () => {
       await writeSettings(instance.dir, settings, content);
+      // Switched-off events lose their section, so keep every event's values for next time.
+      await rememberSessions(sessionMemoryFile(instance.id), settings.sessions);
       await controlService(instance.unit, "restart");
     });
 
@@ -94,7 +101,7 @@ export async function applyAssettoSettings(instanceId: string, _prev: ApplyState
     if (before.settings.tyreWear !== settings.tyreWear) changes.push(`tyre wear ${settings.tyreWear}%`);
     if (before.settings.airTemp !== settings.airTemp) changes.push(`air ${settings.airTemp} °C`);
     if (before.settings.trackTemp !== settings.trackTemp) changes.push(`track +${settings.trackTemp}° above air`);
-    if (before.settings.raceLaps !== settings.raceLaps && settings.raceLaps !== null) changes.push(`${settings.raceLaps} race laps`);
+    changes.push(...sessionChanges(before.settings.sessions, settings.sessions));
     if (before.settings.sunAngle !== settings.sunAngle) changes.push(`start time ${startTimeOf(settings.sunAngle)}`);
     if (before.settings.name !== settings.name) changes.push(`name → "${settings.name}"`);
     if (before.settings.password !== settings.password) changes.push(settings.password ? "changed the password" : "removed the password");

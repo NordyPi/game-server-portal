@@ -7,6 +7,7 @@ import { parseDetails } from "@/lib/games/assetto-corsa/adapter";
 import { parseUiJson, scanContent } from "@/lib/games/assetto-corsa/content";
 import { buildEntryList, parseEntryList, slotsFor, slotsSatisfy, type Slot } from "@/lib/games/assetto-corsa/entries";
 import { readServerCfg, validateSettings, writeSettings, type AcSettingsInput } from "@/lib/games/assetto-corsa/server-config";
+import type { Sessions } from "@/lib/games/assetto-corsa/sessions";
 import { formatTime, parseTime, secondsFromSunAngle, sunAngleFromSeconds } from "@/lib/games/assetto-corsa/sun";
 
 const fixture = path.join(import.meta.dirname, "fixtures", "assetto-corsa");
@@ -67,18 +68,22 @@ test("reads the current settings, grid and ports", async () => {
     trackTemp: 7,
     airTemp: 21,
     tyreWear: 100, // not in the file: default
-    raceLaps: 10,
+    sessions: {
+      practice: { enabled: true, minutes: 60, canJoin: true }, // no IS_OPEN in the file: open
+      qualify: { enabled: false, minutes: 5, canJoin: true }, // no [QUALIFY]: off, default values
+      race: { enabled: true, laps: 10, join: 1 },
+    },
     sunAngle: 48,
   });
   assert.deepEqual(cfg?.ports, { http: 8081, tcp: 9600, udp: 9600 });
 });
 
-test("no [RACE] session means no laps; no entry list spreads MAX_CLIENTS over CARS", async () => {
+test("no [RACE] section means the race is off; no entry list spreads MAX_CLIENTS over CARS", async () => {
   const file = path.join(dir, "cfg", "server_cfg.ini");
   await writeFile(file, (await readFile(file, "utf8")).replace(/\[RACE\][\s\S]*$/, ""));
   await rm(path.join(dir, "cfg", "entry_list.ini"));
   const cfg = await readServerCfg(dir);
-  assert.equal(cfg?.settings.raceLaps, null);
+  assert.equal(cfg?.settings.sessions.race.enabled, false);
   assert.deepEqual(cfg?.settings.entries, [
     { car: "ks_mazda_miata", skin: "", count: 2 },
     { car: "ks_toyota_ae86_drift", skin: "", count: 2 },
@@ -99,7 +104,11 @@ const good: AcSettingsInput = {
   ],
   damage: 0,
   tyreWear: 35,
-  raceLaps: 7,
+  sessions: {
+    practice: { enabled: true, minutes: 20, canJoin: true },
+    qualify: { enabled: true, minutes: 10, canJoin: false },
+    race: { enabled: true, laps: 7, join: 2 },
+  },
   trackTemp: 6,
   airTemp: 18,
   startTime: "09:30",
@@ -123,9 +132,12 @@ test("validation rejects unknown content, too many slots, bad numbers and line b
   assert.match(bad({ entries: [{ car: "ks_mazda_miata", skin: "", count: 49 }] }).entries ?? "", /48 pit boxes/);
   assert.ok(bad({ damage: 101 }).damage);
   assert.ok(bad({ tyreWear: -1 }).tyreWear);
-  assert.ok(bad({ raceLaps: 0 }).raceLaps);
-  assert.ok(bad({ raceLaps: 2.5 }).raceLaps);
-  assert.equal(bad({ raceLaps: null }).raceLaps, undefined);
+  const off = { enabled: false, minutes: 5, canJoin: true };
+  assert.match(bad({ sessions: { practice: off, qualify: off, race: { enabled: false, laps: 5, join: 1 } } }).sessions ?? "", /at least one event/);
+  assert.match(bad({ sessions: { ...good.sessions, practice: { enabled: true, minutes: 0, canJoin: true } } }).sessions ?? "", /Practice/);
+  assert.match(bad({ sessions: { ...good.sessions, race: { enabled: true, laps: 2.5, join: 1 } } }).sessions ?? "", /Race/);
+  // A switched-off event isn't checked (its boxes are greyed out).
+  assert.equal(bad({ sessions: { ...good.sessions, qualify: { enabled: false, minutes: 0, canJoin: true } } }).sessions, undefined);
   assert.ok(bad({ startTime: "25:00" }).startTime);
   assert.ok(bad({ airTemp: Number.NaN }).airTemp);
   assert.ok(bad({ airTemp: 51 }).airTemp);
@@ -153,11 +165,15 @@ test("applying settings edits only the managed keys and keeps comments, other se
   assert.match(after, /; keep this comment\r\nSUN_ANGLE=-56\r\n/);
   assert.match(after, /\r\nDAMAGE_MULTIPLIER=0\r\n/);
   assert.match(after, /\r\nTYRE_WEAR_RATE=35\r\n\r\n\[PRACTICE\]/); // added at the end of [SERVER]
-  assert.match(after, /\[PRACTICE\]\r\nNAME=Practice\r\nTIME=60\r\n/);
+  assert.match(after, /\[PRACTICE\]\r\nNAME=Practice\r\nTIME=20\r\nIS_OPEN=1\r\n/);
   assert.match(after, /\[WEATHER_0\]\r\nGRAPHICS=3_clear\r\nBASE_TEMPERATURE_AMBIENT=18\r\nBASE_TEMPERATURE_ROAD=6\r\n/);
   assert.doesNotMatch(after, /\[SERVER\][^[]*BASE_TEMPERATURE/); // never written into [SERVER]
-  assert.match(after, /\[RACE\]\r\nNAME=Race\r\nLAPS=7\r\nWAIT_TIME=60\r\n$/);
-  assert.equal(after.split("\n").length, before.split("\n").length + 1);
+  // Qualify didn't exist: added before the race. The race keeps its WAIT_TIME, runs by laps (TIME=0)
+  // and is joinable until the start (IS_OPEN=2).
+  assert.match(
+    after,
+    /BASE_TEMPERATURE_ROAD=6\r\n\r\n\[QUALIFY\]\r\nNAME=Qualify\r\nTIME=10\r\nIS_OPEN=0\r\n\r\n\[RACE\]\r\nNAME=Race\r\nLAPS=7\r\nWAIT_TIME=60\r\nTIME=0\r\nIS_OPEN=2\r\n$/,
+  );
   assert.equal(await readFile(path.join(dir, "cfg", "server_cfg.ini.bak"), "utf8"), before);
 
   const slots = parseEntryList(await readFile(path.join(dir, "cfg", "entry_list.ini"), "utf8"));
@@ -170,14 +186,57 @@ test("applying settings edits only the managed keys and keeps comments, other se
   ]);
 });
 
-test("laps are never added to a server without a race session", async () => {
+test("switching events off removes their sections; switching them on adds them back in order", async () => {
   const file = path.join(dir, "cfg", "server_cfg.ini");
-  await writeFile(file, (await readFile(file, "utf8")).replace(/\[RACE\][\s\S]*$/, ""));
   const content = await scanContent(dir);
-  const v = validateSettings({ ...good, raceLaps: 3 }, content);
-  assert.ok(v.ok);
-  await writeSettings(dir, v.settings, content);
-  assert.doesNotMatch(await readFile(file, "utf8"), /RACE|LAPS/);
+  const save = async (sessions: Sessions) => {
+    const v = validateSettings({ ...good, sessions }, content);
+    assert.ok(v.ok);
+    await writeSettings(dir, v.settings, content);
+    return readFile(file, "utf8");
+  };
+
+  // Only qualify: practice and race disappear, everything else stays.
+  const qualifyOnly = await save({
+    practice: { enabled: false, minutes: 20, canJoin: true },
+    qualify: { enabled: true, minutes: 8, canJoin: true },
+    race: { enabled: false, laps: 7, join: 1 },
+  });
+  assert.doesNotMatch(qualifyOnly, /PRACTICE|\[RACE\]|LAPS|WAIT_TIME/);
+  assert.match(qualifyOnly, /\[WEATHER_0\]\r\nGRAPHICS=3_clear\r\n/);
+  assert.match(qualifyOnly, /\r\n\r\n\[QUALIFY\]\r\nNAME=Qualify\r\nTIME=8\r\nIS_OPEN=1\r\n$/);
+  assert.doesNotMatch(qualifyOnly, /\r\n\r\n\r\n/); // no gaps left behind
+
+  // All three again: practice goes before qualify, the race after it with the default WAIT_TIME.
+  const all = await save({
+    practice: { enabled: true, minutes: 15, canJoin: false },
+    qualify: { enabled: true, minutes: 8, canJoin: true },
+    race: { enabled: true, laps: 12, join: 1 },
+  });
+  assert.match(
+    all,
+    /\[PRACTICE\]\r\nNAME=Practice\r\nTIME=15\r\nIS_OPEN=0\r\n\r\n\[QUALIFY\]\r\nNAME=Qualify\r\nTIME=8\r\nIS_OPEN=1\r\n\r\n\[RACE\]\r\nNAME=Race\r\nTIME=0\r\nIS_OPEN=1\r\nWAIT_TIME=15\r\nLAPS=12\r\n$/,
+  );
+  const cfg = await readServerCfg(dir);
+  assert.deepEqual(cfg?.settings.sessions, {
+    practice: { enabled: true, minutes: 15, canJoin: false },
+    qualify: { enabled: true, minutes: 8, canJoin: true },
+    race: { enabled: true, laps: 12, join: 1 },
+  });
+});
+
+test("a switched-off event shows its remembered values", async () => {
+  const file = path.join(dir, "cfg", "server_cfg.ini");
+  await writeFile(file, (await readFile(file, "utf8")).replace(/\[PRACTICE\]\r\nNAME=Practice\r\nTIME=60\r\n\r\n/, ""));
+  const remembered: Sessions = {
+    practice: { enabled: true, minutes: 45, canJoin: false },
+    qualify: { enabled: false, minutes: 12, canJoin: true },
+    race: { enabled: true, laps: 3, join: 2 },
+  };
+  const cfg = await readServerCfg(dir, remembered);
+  assert.deepEqual(cfg?.settings.sessions.practice, { enabled: false, minutes: 45, canJoin: false });
+  assert.deepEqual(cfg?.settings.sessions.qualify, { enabled: false, minutes: 12, canJoin: true });
+  assert.deepEqual(cfg?.settings.sessions.race, { enabled: true, laps: 10, join: 1 }); // in the file: the file wins
 });
 
 test("an unchanged grid keeps the hand-made entry list (AI slots etc.) when the track changes", async () => {

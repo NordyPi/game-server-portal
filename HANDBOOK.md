@@ -65,9 +65,15 @@ restarts it and disconnects anyone driving.
 - **Saved grids**: type a name and click **Save grid as preset**. Later pick it under **Load a saved grid**, then Save & restart.
 - **Session**:
   - **Damage** and **Tyre wear**: 0–100 %.
-  - **Race laps**: only shown if the server has a race session.
+  - **Air temperature** (°C) and **Track: degrees above air** (the track is that much warmer than the air).
   - **Start time**: 24-hour time. Plain Assetto Corsa only shows 08:00–18:00; other times need CSP.
     Times snap to 3¾-minute steps.
+- **Event Setup**: one row each for Practice, Qualify and Race.
+  - **Enabled**: unchecking it removes that event from `server_cfg.ini`. The portal remembers its values,
+    so checking it again brings them back. At least one event has to stay on.
+  - **Practice / Qualify**: session duration in minutes, and **Can join** (people can join during it).
+  - **Race**: always by laps. **Can join** is *Open*, *Until start* (no joining once the race begins)
+    or *Closed*.
 - **Server name / password**: what shows in the lobby, and the password to join.
 
 ### Adding a new mod (car or track)
@@ -178,7 +184,7 @@ starting (`journalctl --user -u assetto-corsa@main -f`).
 
 | File | What the portal changes | Backup |
 | --- | --- | --- |
-| `cfg/server_cfg.ini` | `NAME`, `PASSWORD`, `TRACK`, `CONFIG_TRACK`, `CARS`, `MAX_CLIENTS`, `DAMAGE_MULTIPLIER`, `TYRE_WEAR_RATE`, `SUN_ANGLE`, `[RACE] LAPS`; everything else stays as it was | `server_cfg.ini.bak` (previous version) |
+| `cfg/server_cfg.ini` | `NAME`, `PASSWORD`, `TRACK`, `CONFIG_TRACK`, `CARS`, `MAX_CLIENTS`, `DAMAGE_MULTIPLIER`, `TYRE_WEAR_RATE`, `SUN_ANGLE`, the `[WEATHER_0]` temperatures, and the `[PRACTICE]` / `[QUALIFY]` / `[RACE]` sections (added or removed when an event is switched on or off); everything else stays as it was | `server_cfg.ini.bak` (previous version) |
 | `cfg/entry_list.ini` | rewritten only when the grid really changes | `entry_list.ini.bak` |
 | `cfg/extra_cfg.yml` | only makes sure `IgnoreConfigurationErrors: MissingCarChecksums/MissingTrackParams: true` exist, and puts back a missing `---` before plugin sections | `extra_cfg.yml.before-fix` (from the first fix by hand) |
 | `data/activity.jsonl` | "Recent changes" | — |

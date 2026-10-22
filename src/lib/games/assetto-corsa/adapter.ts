@@ -2,6 +2,7 @@ import type { GameAdapter, LiveInfo, Player } from "@/lib/games/types";
 import { getContent } from "./catalog";
 import { carsOf, totalSlots } from "./entries";
 import { readServerCfg, startTimeOf } from "./server-config";
+import { describeSessions } from "./sessions";
 
 export const assettoCorsa: GameAdapter = {
   id: "assetto-corsa",
@@ -22,7 +23,7 @@ export const assettoCorsa: GameAdapter = {
         label: "Session",
         value: [
           `${totalSlots(settings.entries)} slots`,
-          settings.raceLaps !== null ? `${settings.raceLaps} laps` : null,
+          describeSessions(settings.sessions) || null,
           `starts ${startTimeOf(settings.sunAngle)}`,
           `damage ${settings.damage}%`,
           `tyre wear ${settings.tyreWear}%`,

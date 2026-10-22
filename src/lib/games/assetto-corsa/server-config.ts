@@ -4,12 +4,14 @@ import { IniFile } from "@/lib/ini";
 import { CONTENT_ID, type Content } from "./content";
 import { buildEntryList, carsOf, parseEntryList, rowsFromSlots, slotsFor, slotsSatisfy, totalSlots, type EntryRow } from "./entries";
 import { ensureMissingContentAllowed } from "./extra-config";
+import { readSessions, validateSessions, writeSessions, type Sessions } from "./sessions";
 import { formatTime, parseTime, secondsFromSunAngle, sunAngleFromSeconds } from "./sun";
 import { formatTrackSetting, parseTrackSetting } from "./track-setting";
 
 // Reads and writes the two files that decide what the server runs:
 //   cfg/server_cfg.ini   [SERVER] NAME, PASSWORD, TRACK, CONFIG_TRACK, CARS, MAX_CLIENTS,
-//                        DAMAGE_MULTIPLIER, TYRE_WEAR_RATE, SUN_ANGLE and [RACE] LAPS
+//                        DAMAGE_MULTIPLIER, TYRE_WEAR_RATE, SUN_ANGLE, [WEATHER_0] temperatures, and the
+//                        [PRACTICE] / [QUALIFY] / [RACE] events (see sessions.ts)
 //                        (everything else is left untouched)
 //   cfg/entry_list.ini   one [CAR_n] section per grid slot (see entries.ts)
 // In extra_cfg.yml (AssettoServer's own settings) only two "ignore missing content" flags are set; see extra-config.ts.
@@ -37,8 +39,8 @@ export type AcSettings = {
   airTemp: number;
   /** Percent, 0 = tyres never wear. */
   tyreWear: number;
-  /** null when server_cfg.ini has no [RACE] session (e.g. practice-only / free-roam servers). */
-  raceLaps: number | null;
+  /** Practice, qualify and race: on/off, duration or laps, who can join. */
+  sessions: Sessions;
   /** Time of day the server starts at; see sun.ts. */
   sunAngle: number;
 };
@@ -49,11 +51,14 @@ export type AcSettingsInput = Omit<AcSettings, "sunAngle"> & { startTime: string
 export type AcPorts = { http: number | null; tcp: number | null; udp: number | null };
 
 export const MAX_SLOTS = 128;
-export const DEFAULT_LAPS = 5;
 
 const cfgPath = (dir: string, file: string) => path.join(dir, "cfg", file);
 
-export async function readServerCfg(dir: string): Promise<{ settings: AcSettings; ports: AcPorts; cars: string[] } | null> {
+/** `rememberedSessions`: last values of switched-off events (session-memory.ts), shown in their boxes. */
+export async function readServerCfg(
+  dir: string,
+  rememberedSessions?: Sessions,
+): Promise<{ settings: AcSettings; ports: AcPorts; cars: string[] } | null> {
   let ini: IniFile;
   try {
     ini = new IniFile(await readFile(cfgPath(dir, "server_cfg.ini"), "utf8"));
@@ -85,7 +90,7 @@ export async function readServerCfg(dir: string): Promise<{ settings: AcSettings
       trackTemp: int("BASE_TEMPERATURE_ROAD", "WEATHER_0") ?? 6,
       airTemp: int("BASE_TEMPERATURE_AMBIENT", "WEATHER_0") ?? 18,
       tyreWear: int("TYRE_WEAR_RATE") ?? 100,
-      raceLaps: ini.sections().includes("RACE") ? (int("LAPS", "RACE") || DEFAULT_LAPS) : null,
+      sessions: readSessions(ini, rememberedSessions),
       sunAngle: int("SUN_ANGLE") ?? 0,
     },
     ports: { http: int("HTTP_PORT"), tcp: int("TCP_PORT"), udp: int("UDP_PORT") },
@@ -143,9 +148,8 @@ export function validateSettings(
   const between = (v: number, min: number, max: number) => Number.isInteger(v) && v >= min && v <= max;
   if (!between(input.airTemp, -20, 50)) errors.airTemp = "A whole number from -20 to 50 °C.";
   if (!between(input.trackTemp, -10, 30)) errors.trackTemp = "A whole number from -10 to 30.";
-  if (input.raceLaps !== null && (!Number.isInteger(input.raceLaps) || input.raceLaps < 1 || input.raceLaps > 999)) {
-    errors.raceLaps = "A whole number of laps, 1 or more.";
-  }
+  const sessionError = validateSessions(input.sessions);
+  if (sessionError) errors.sessions = sessionError;
   if (input.cspVersion !== null && (!Number.isInteger(input.cspVersion) || input.cspVersion < 1 || input.cspVersion > 99999)) {
     errors.cspVersion = "A CSP build number like 4116, or leave it empty.";
   }
@@ -166,7 +170,7 @@ export function validateSettings(
       entries: input.entries,
       damage: input.damage,
       tyreWear: input.tyreWear,
-      raceLaps: input.raceLaps,
+      sessions: input.sessions,
       sunAngle: sunAngleFromSeconds(seconds!),
       trackTemp: input.trackTemp,
       airTemp: input.airTemp,
@@ -204,8 +208,7 @@ export async function writeSettings(dir: string, settings: AcSettings, content: 
     ini.set("WEATHER_0", "BASE_TEMPERATURE_ROAD", String(settings.trackTemp));
     ini.set("WEATHER_0", "BASE_TEMPERATURE_AMBIENT", String(settings.airTemp));
   }
-  // Only edit an existing race session; adding [RACE] would change which sessions the server runs.
-  if (settings.raceLaps !== null && ini.sections().includes("RACE")) ini.set("RACE", "LAPS", String(settings.raceLaps));
+  writeSessions(ini, settings.sessions);
 
   const entryListFile = cfgPath(dir, "entry_list.ini");
   const rewrite = !slotsSatisfy(parseEntryList(await readText(entryListFile)), settings.entries);

@@ -6,6 +6,7 @@ import { deleteEntryPreset, saveEntryPreset } from "@/app/preset-actions";
 import type { Track } from "@/lib/games/assetto-corsa/content";
 import { totalSlots, type EntryRow } from "@/lib/games/assetto-corsa/entries";
 import type { AcSettings } from "@/lib/games/assetto-corsa/server-config";
+import { JOIN_LABELS, MAX_LAPS, MAX_MINUTES, type JoinMode, type Sessions } from "@/lib/games/assetto-corsa/sessions";
 import { formatTime, parseTime, secondsFromSunAngle, sunAngleFromSeconds, VANILLA_MAX, VANILLA_MIN } from "@/lib/games/assetto-corsa/sun";
 
 type CarOption = { id: string; name: string; brand: string; skins: string[] };
@@ -45,7 +46,15 @@ export function AssettoSettingsForm({
   const [trackTemp, setTrackTemp] = useState(String(current.trackTemp));
   const [airTemp, setAirTemp] = useState(String(current.airTemp));
   const [tyreWear, setTyreWear] = useState(current.tyreWear);
-  const [raceLaps, setRaceLaps] = useState(current.raceLaps === null ? null : String(current.raceLaps));
+  // Events: numbers kept as text while typing; sent to the server as JSON (see the hidden "sessions" input).
+  const [practice, setPractice] = useState(() => ({ ...current.sessions.practice, minutes: String(current.sessions.practice.minutes) }));
+  const [qualify, setQualify] = useState(() => ({ ...current.sessions.qualify, minutes: String(current.sessions.qualify.minutes) }));
+  const [race, setRace] = useState(() => ({ ...current.sessions.race, laps: String(current.sessions.race.laps) }));
+  const sessions: Sessions = {
+    practice: { ...practice, minutes: Number(practice.minutes) },
+    qualify: { ...qualify, minutes: Number(qualify.minutes) },
+    race: { ...race, laps: Number(race.laps) },
+  };
   const [startTime, setStartTime] = useState(formatTime(secondsFromSunAngle(current.sunAngle)));
   const [cspVersion, setCspVersion] = useState(current.cspVersion === null ? "" : String(current.cspVersion));
 
@@ -194,6 +203,8 @@ export function AssettoSettingsForm({
         <div className="grid gap-5 sm:grid-cols-2">
           <Slider label="Damage" name="damage" value={damage} onChange={setDamage} error={errors.damage} left="No damage" right="Full damage" />
           <Slider label="Tyre wear" name="tyreWear" value={tyreWear} onChange={setTyreWear} error={errors.tyreWear} left="No wear" right="Normal wear" />
+        </div>
+        <div className="mt-5 grid gap-5 sm:grid-cols-3">
           <Field label="Air temperature (°C)" error={errors.airTemp}>
             <input className="field" type="number" name="airTemp" min={-20} max={50} step={1} value={airTemp} onChange={(e) => setAirTemp(e.target.value)} required />
           </Field>
@@ -202,13 +213,6 @@ export function AssettoSettingsForm({
             {/* AssettoServer: road temperature = air temperature + this number. */}
             {airTemp !== "" && trackTemp !== "" && Number.isFinite(Number(airTemp) + Number(trackTemp)) && (
               <Hint>Track ≈ {Number(airTemp) + Number(trackTemp)} °C</Hint>
-            )}
-          </Field>
-          <Field label="Race laps" error={errors.raceLaps}>
-            {raceLaps === null ? (
-              <p className="text-sm text-muted">This server has no race session (only practice/free-roam), so there are no laps to set.</p>
-            ) : (
-              <input className="field" type="number" name="raceLaps" min={1} max={999} step={1} value={raceLaps} onChange={(e) => setRaceLaps(e.target.value)} required />
             )}
           </Field>
           <Field label="Start time (24-hour)" error={errors.startTime}>
@@ -226,6 +230,43 @@ export function AssettoSettingsForm({
             <StartTimeHint text={startTime} />
           </Field>
         </div>
+      </fieldset>
+
+      {/* ---- Event Setup ---- */}
+      <fieldset>
+        <legend className="mb-3 font-display text-base font-bold">Event Setup</legend>
+        <input type="hidden" name="sessions" value={JSON.stringify(sessions)} />
+        <div className="divide-y divide-border rounded-lg border border-border px-3">
+          <EventRow title="Practice" enabled={practice.enabled} onEnabled={(enabled) => setPractice((p) => ({ ...p, enabled }))}>
+            <NumberInline label="Session duration" unit="min" max={MAX_MINUTES} value={practice.minutes} onChange={(minutes) => setPractice((p) => ({ ...p, minutes }))} />
+            <CheckInline label="Can join" checked={practice.canJoin} onChange={(canJoin) => setPractice((p) => ({ ...p, canJoin }))} />
+          </EventRow>
+          <EventRow title="Qualify" enabled={qualify.enabled} onEnabled={(enabled) => setQualify((q) => ({ ...q, enabled }))}>
+            <NumberInline label="Session duration" unit="min" max={MAX_MINUTES} value={qualify.minutes} onChange={(minutes) => setQualify((q) => ({ ...q, minutes }))} />
+            <CheckInline label="Can join" checked={qualify.canJoin} onChange={(canJoin) => setQualify((q) => ({ ...q, canJoin }))} />
+          </EventRow>
+          <EventRow title="Race" enabled={race.enabled} onEnabled={(enabled) => setRace((r) => ({ ...r, enabled }))}>
+            <NumberInline label="Race laps" unit="laps" max={MAX_LAPS} value={race.laps} onChange={(laps) => setRace((r) => ({ ...r, laps }))} />
+            <label className="flex items-center gap-2 whitespace-nowrap text-sm">
+              Can join
+              <select className="field w-auto py-1.5 text-sm" value={race.join} onChange={(e) => setRace((r) => ({ ...r, join: Number(e.target.value) as JoinMode }))}>
+                {([1, 2, 0] as const).map((mode) => (
+                  <option key={mode} value={mode}>
+                    {JOIN_LABELS[mode]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </EventRow>
+        </div>
+        {errors.sessions ? (
+          <p className="mt-2 text-sm text-danger">{errors.sessions}</p>
+        ) : (
+          <Hint>
+            Switching an event off removes it from the server; its values are remembered for next time. “Until start” lets people join the race
+            only before it begins.
+          </Hint>
+        )}
       </fieldset>
 
       {/* ---- Server ---- */}
@@ -388,6 +429,41 @@ function StartTimeHint({ text }: { text: string }) {
         <Hint warn>Outside 08:00–18:00: everyone needs Custom Shaders Patch (CSP) to see this time.</Hint>
       )}
     </>
+  );
+}
+
+/**
+ * One event: its name, the Enabled box, then its settings. The settings sit in a <fieldset> that is
+ * disabled (greyed out, not editable) while the event is off.
+ */
+function EventRow({ title, enabled, onEnabled, children }: { title: string; enabled: boolean; onEnabled: (on: boolean) => void; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3 sm:grid sm:grid-cols-[5.5rem_6.5rem_1fr]">
+      <span className="font-semibold">{title}</span>
+      <CheckInline label="Enabled" checked={enabled} onChange={onEnabled} />
+      <fieldset disabled={!enabled} className="flex flex-wrap items-center gap-x-6 gap-y-2 disabled:opacity-50">
+        {children}
+      </fieldset>
+    </div>
+  );
+}
+
+function CheckInline({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <input type="checkbox" className="size-4 accent-(--accent)" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {label}
+    </label>
+  );
+}
+
+function NumberInline({ label, unit, max, value, onChange }: { label: string; unit: string; max: number; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex items-center gap-2 whitespace-nowrap text-sm">
+      {label}
+      <input className="field w-20 py-1.5 text-sm" type="number" min={1} max={max} step={1} value={value} onChange={(e) => onChange(e.target.value)} required />
+      <span className="text-muted">{unit}</span>
+    </label>
   );
 }
 

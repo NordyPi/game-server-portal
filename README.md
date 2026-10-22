@@ -220,12 +220,27 @@ puts it back, and Save & restart applies it. Presets are kept in
 | --- | --- | --- |
 | Damage | `[SERVER] DAMAGE_MULTIPLIER` | 0–100 %, defaults to 100 if the file doesn't set it. |
 | Tyre wear | `[SERVER] TYRE_WEAR_RATE` | 0–100 %, defaults to 100 if the file doesn't set it. |
-| Race laps | `[RACE] LAPS` | Only shown when the config has a `[RACE]` session. The portal never adds one, because that would change which sessions the server runs. |
+| Air temperature | `[WEATHER_0] BASE_TEMPERATURE_AMBIENT` | °C. Only written if the config has a `[WEATHER_0]` section. |
+| Track: degrees above air | `[WEATHER_0] BASE_TEMPERATURE_ROAD` | AssettoServer adds it to the air temperature. |
 | Start time | `[SERVER] SUN_ANGLE` | Typed as 24-hour time. `SUN_ANGLE = 16 × (hours − 13)`, the same formula AssettoServer uses, so 13:00 = 0, 08:00 = −80, 18:00 = 80. It's a whole number, so times snap to 3¾-minute steps (the page shows the real start time). Plain Assetto Corsa only shows 08:00–18:00. Outside that range everyone needs Custom Shaders Patch (CSP). |
 
+**Event Setup.**
+
+| Event | Section | Settings |
+| --- | --- | --- |
+| Practice | `[PRACTICE]` | Enabled, `TIME` (minutes), `IS_OPEN` 1/0 (Can join) |
+| Qualify | `[QUALIFY]` | Enabled, `TIME` (minutes), `IS_OPEN` 1/0 (Can join) |
+| Race | `[RACE]` | Enabled, `LAPS`, `IS_OPEN` 1 Open / 2 Until start / 0 Closed; `TIME` is always 0 (races run by laps) |
+
+Switching an event off removes its section; switching it on adds it back (Practice → Qualify → Race
+order; a new race gets `WAIT_TIME=15`). The values of switched-off events are kept in
+`data/sessions-<server id>.json`, so they come back when the event is switched on again. Settings in
+an existing section that the portal doesn't show (like `WAIT_TIME`) stay as they were.
+
 **What "Save & restart" does:** it updates `NAME`, `PASSWORD`, `TRACK`, `CONFIG_TRACK`, `CARS`,
-`MAX_CLIENTS` (the grid's total), `DAMAGE_MULTIPLIER`, `TYRE_WEAR_RATE`, `SUN_ANGLE` and `[RACE] LAPS`
-in `server_cfg.ini`, and leaves everything else (other sessions, weather, comments) as it was.
+`MAX_CLIENTS` (the grid's total), `DAMAGE_MULTIPLIER`, `TYRE_WEAR_RATE`, `SUN_ANGLE`, the
+`[WEATHER_0]` temperatures and the event sections in `server_cfg.ini`, and leaves everything else
+(other sections, comments) as it was.
 It only rebuilds `entry_list.ini` when the grid really changed. If the file already has the same
 cars, slot counts and chosen skins, it stays as it is, so hand edits to it (AI traffic slots,
 ballast) survive a track change. The previous version of each file is kept as `*.bak`.
